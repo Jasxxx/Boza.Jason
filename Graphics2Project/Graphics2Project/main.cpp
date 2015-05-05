@@ -18,9 +18,10 @@
 #include "XTime.h"
 #include <d3d11.h>
 #include <DirectXMath.h>
-#include 
+#include <map>
+#include "TextureManager.h"
 
-#pragma comment(lib, "d3d11.lib");
+#pragma comment(lib, "d3d11.lib")
 
 using namespace std;
 using namespace DirectX;
@@ -37,14 +38,40 @@ class DEMO_APP
 	HINSTANCE						application;
 	WNDPROC							appWndProc;
 	HWND							window;
+
+	// Camera Matricies
 	XMFLOAT4X4 VIEWMATRIX;
 	XMFLOAT4X4 PROJECTIONMATRIX;
+
+	// Texture class for loading and unloading of textures
+	TextureManager Textures;
+
+	// Direct 3D interface declarations
+	IDXGISwapChain* pSwapChain;
+	ID3D11Device* pDevice;
+	ID3D11DeviceContext* pDeviceContext;
+	ID3D11ShaderResourceView* SRV;
+	ID3D11SamplerState* pTextureSamplerState;
+	ID3D11RenderTargetView* pBackBuffer;
+	ID3D11VertexShader* pVertexShader;
+	ID3D11PixelShader* pPixelShader;
+	ID3D11InputLayout* pInputLayout;
+	ID3D11Texture2D* pDepthStencil;
+	ID3D11DepthStencilView* pDSV;
+	ID3D11RasterizerState* pDefaultRasterState;
+	ID3D11BlendState* pBlendState;
+
+	D3D11_VIEWPORT MAIN_VIEWPORT;
+
+	// Buffers
+	ID3D11Buffer* pConstantBuffer;
+	ID3D11Buffer* pIndexBuffer;
+
+	// Declaration of Time object for time related use
+	XTime Time;
 	
 
 public:
-	// BEGIN PART 2
-	// TODO: PART 2 STEP 1
-	
 	DEMO_APP(HINSTANCE hinst, WNDPROC proc);
 	bool Run();
 	bool ShutDown();
