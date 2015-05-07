@@ -31,7 +31,7 @@ HRESULT FBXLoader::LoadFXB(vector<VERTEX>* Vertecies)
 	FbxScene* pScene = FbxScene::Create(FBXM, "");
 
 	// Open file
-	bool bSuccess = pImporter->Initialize("cone.fbx", -1, FBXM->GetIOSettings());
+	bool bSuccess = pImporter->Initialize("Ocean.fbx", -1, FBXM->GetIOSettings());
 	if (!bSuccess)
 		return E_FAIL;
 

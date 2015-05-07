@@ -58,7 +58,7 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="Graphics2Project.vcxproj" />
-    <None Include="Graphics2Project.vcxproj.user" />
+    <FxCompile Include="General_PS.hlsl" />
+    <FxCompile Include="General_VS.hlsl" />
   </ItemGroup>
 </Project>
