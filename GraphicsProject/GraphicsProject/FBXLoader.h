@@ -31,7 +31,7 @@ HRESULT FBXLoader::LoadFXB(vector<VERTEX>* Vertecies)
 	FbxScene* pScene = FbxScene::Create(FBXM, "");
 
 	// Open file
-	bool bSuccess = pImporter->Initialize("cone.fbx", -1, FBXM->GetIOSettings());
+	bool bSuccess = pImporter->Initialize("Ocean.fbx", -1, FBXM->GetIOSettings());
 	if (!bSuccess)
 		return E_FAIL;
 
@@ -85,6 +85,9 @@ HRESULT FBXLoader::LoadFXB(vector<VERTEX>* Vertecies)
 					tempVert.Position.x = (float)pVerts[ControlPointIndex].mData[0];
 					tempVert.Position.y = (float)pVerts[ControlPointIndex].mData[1];
 					tempVert.Position.z = (float)pVerts[ControlPointIndex].mData[2];
+					tempVert.Color = XMFLOAT4(0, 0, 0, 0);
+					tempVert.Normal = XMFLOAT2(0, 0);
+					tempVert.TextureCoord = XMFLOAT2(0,0);
 					Vertecies->push_back(tempVert);
 				}
 			}

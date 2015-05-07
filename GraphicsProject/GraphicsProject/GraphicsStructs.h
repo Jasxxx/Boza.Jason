@@ -11,4 +11,5 @@ struct VERTEX
 	XMFLOAT4 Color;
 	XMFLOAT2 TextureCoord;
 	XMFLOAT2 Normal;
+	XMFLOAT4 padding;
 };

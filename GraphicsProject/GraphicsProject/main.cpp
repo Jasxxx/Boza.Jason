@@ -70,7 +70,7 @@ class DEMO_APP
 	// Buffers
 	ID3D11Buffer* pConstantBuffer;
 	ID3D11Buffer* pIndexBuffer;
-	map<string,ID3D11Buffer*> VertexBufferMap;
+	ID3D11Buffer* VertexBufferMap;
 	// Declaration of Time object for time related use
 	XTime Time;
 public:
@@ -200,20 +200,20 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	vector<VERTEX> verts;
 	FBX.LoadFXB(&verts);
 
-	VertexBufferMap["Bell"] = nullptr;
-
 	D3D11_SUBRESOURCE_DATA data;
 	ZeroMemory(&data, sizeof(data));
 	data.pSysMem = &verts;
+	data.SysMemPitch = 0;
+	data.SysMemSlicePitch = 0;
 
 	D3D11_BUFFER_DESC vBuffer;
 	ZeroMemory(&vBuffer, sizeof(vBuffer));
-	vBuffer.Usage = D3D11_USAGE_IMMUTABLE;
+	vBuffer.Usage = D3D11_USAGE_DYNAMIC;
 	vBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-	vBuffer.CPUAccessFlags = NULL;
-	vBuffer.ByteWidth = sizeof(VERTEX) * verts.size();
+	vBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	vBuffer.ByteWidth = sizeof(VERTEX) * verts.size() * 3;
 
-	pDevice->CreateBuffer(&vBuffer, &data, &VertexBufferMap["Bell"]);
+	pDevice->CreateBuffer(&vBuffer, &data, &VertexBufferMap);
 #pragma endregion
 
 	Time.Restart();
