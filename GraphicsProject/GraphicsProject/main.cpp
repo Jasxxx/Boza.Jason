@@ -23,14 +23,16 @@
 #include "FBXLoader.h"
 #include "General_VS.csh"
 #include "General_PS.csh"
+#include "Trivial_VS.csh"
+#include "Trivial_PS.csh"
 
 #pragma comment(lib, "d3d11.lib")
 
 using namespace DirectX;
 using namespace std;
 
-#define BACKBUFFER_WIDTH	1280
-#define BACKBUFFER_HEIGHT	720
+#define BACKBUFFER_WIDTH	500	
+#define BACKBUFFER_HEIGHT	500
 
 //************************************************************
 //************ SIMPLE WINDOWS APP CLASS **********************
@@ -44,9 +46,10 @@ class DEMO_APP
 
 	// FBX file loader interface
 	FBXLoader FBX;
-
+	vector<VERTEX> verts;
 	// Camera Matricies
 	XMFLOAT4X4 VIEWMATRIX;
+	XMFLOAT4X4 WORLDMATRIX;
 	XMFLOAT4X4 PROJECTIONMATRIX;
 
 	// Texture class for loading and unloading of textures
@@ -75,11 +78,20 @@ class DEMO_APP
 	ID3D11Buffer* VertexBufferMap;
 	// Declaration of Time object for time related use
 	XTime Time;
+
+	struct SEND_TO_VRAM
+	{
+		XMFLOAT4X4 WORLDMATRIX;
+		XMFLOAT4X4 VIEWMATRIX;
+		XMFLOAT4X4 PROJECTIONMATRIX;
+	};
+
+	SEND_TO_VRAM toShader;
 public:
 	DEMO_APP(HINSTANCE hinst, WNDPROC proc);
 	bool Run();
 	bool ShutDown();
-
+	float rotation = 0;
 };
 
 //************************************************************
@@ -132,12 +144,12 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	scd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
 	D3D11_CREATE_DEVICE_FLAG flag = (D3D11_CREATE_DEVICE_FLAG)0;
-	flag = D3D11_CREATE_DEVICE_SINGLETHREADED;
+	flag = D3D11_CREATE_DEVICE_DEBUG ;
 
 #if _DEBUG
 	flag = D3D11_CREATE_DEVICE_DEBUG;
 #endif
-
+	   
 	D3D11CreateDeviceAndSwapChain(NULL,
 		D3D_DRIVER_TYPE_HARDWARE,
 		NULL,
@@ -175,7 +187,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	descDepth.CPUAccessFlags = 0;
 	descDepth.MiscFlags = 0;
 
-	HRESULT ok = pDevice->CreateTexture2D(&descDepth, NULL, &pDepthStencil);
+	pDevice->CreateTexture2D(&descDepth, NULL, &pDepthStencil);
 
 	D3D11_DEPTH_STENCIL_VIEW_DESC descDSV;
 	ZeroMemory(&descDSV, sizeof(D3D11_DEPTH_STENCIL_VIEW_DESC));
@@ -197,32 +209,96 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 #pragma endregion
 
 #pragma region Buffers
-	vector<VERTEX> verts;
+	
 	FBX.LoadFXB(&verts);
+
+	VERTEX Star[12];
+
+	Star[0].Position = XMFLOAT4(0, 0, 0.2f, 1);
+	Star[0].Color = XMFLOAT4(0, 1, 0, 1);
+	for (int i = 1; i < 11; i++)
+	{
+		float x;
+		float y;
+		if (i % 2 == 0)
+		{
+			x = (float)cos(((i - 1) * 36)* (3.14159 / 180)) / 2;
+			y = (float)sin(((i - 1) * 36)* (3.14159 / 180)) / 2;
+		}
+		else
+		{
+			x = (float)cos(((i - 1) * 36)* (3.14159 / 180));
+			y = (float)sin(((i - 1) * 36)* (3.14159 / 180));
+		}
+		Star[i].Position = XMFLOAT4(x, y, 0, 1);
+		Star[i].Color = XMFLOAT4(1, 0, 0, 1);
+	}
+	Star[11].Position = XMFLOAT4(0, 0, -0.2f, 1);
+	Star[11].Color = XMFLOAT4(0, 1, 0, 1);
+
+	unsigned int StarIndecies[60] =
+	{
+		0, 1, 2, 0, 2, 3, 0, 3, 4,
+		0, 4, 5, 0, 5, 6, 0, 6, 7,
+		0, 7, 8, 0, 8, 9, 0, 9, 10,
+		0, 10, 1,
+		11, 2, 1, 11, 3, 2, 11, 4, 3,
+		11, 5, 4, 11, 6, 5, 11, 7, 6,
+		11, 8, 7, 11, 9, 8, 11, 10, 9,
+		11, 1, 10
+	};
+
+	D3D11_SUBRESOURCE_DATA indexData;
+	indexData.pSysMem = StarIndecies;
+	indexData.SysMemPitch = 0;
+	indexData.SysMemSlicePitch = 0;
+
+	D3D11_BUFFER_DESC iBuffer;
+	ZeroMemory(&iBuffer, sizeof(iBuffer));
+	iBuffer.Usage = D3D11_USAGE_IMMUTABLE;
+	iBuffer.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	iBuffer.CPUAccessFlags = NULL;
+	iBuffer.ByteWidth = sizeof(unsigned int) * ARRAYSIZE(StarIndecies);
+
+	pDevice->CreateBuffer(&iBuffer, &indexData, &pIndexBuffer);
 
 	D3D11_SUBRESOURCE_DATA data;
 	ZeroMemory(&data, sizeof(data));
-	data.pSysMem = &verts;
+	data.pSysMem = &Star;
 	data.SysMemPitch = 0;
 	data.SysMemSlicePitch = 0;
 
 	D3D11_BUFFER_DESC vBuffer;
 	ZeroMemory(&vBuffer, sizeof(vBuffer));
-	vBuffer.Usage = D3D11_USAGE_DYNAMIC;
+	vBuffer.Usage = D3D11_USAGE_IMMUTABLE;
 	vBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-	vBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-	vBuffer.ByteWidth = sizeof(VERTEX) * verts.size() * 3;
+	vBuffer.CPUAccessFlags = NULL;
+	vBuffer.ByteWidth = sizeof(VERTEX) * ARRAYSIZE(Star);
 
 	pDevice->CreateBuffer(&vBuffer, &data, &VertexBufferMap);
+
+	// Constant Buffer
+	D3D11_BUFFER_DESC cBufferData;
+	ZeroMemory(&cBufferData, sizeof(cBufferData));
+	cBufferData.ByteWidth = sizeof(SEND_TO_VRAM);
+	// TODO: PART 3 STEP 4b
+	cBufferData.Usage = D3D11_USAGE_DYNAMIC;
+	cBufferData.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cBufferData.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	D3D11_SUBRESOURCE_DATA cData;
+	ZeroMemory(&cData, sizeof(cData));
+	cData.pSysMem = &toShader;
+	pDevice->CreateBuffer(&cBufferData, &cData, &pConstantBuffer);
 #pragma endregion
 
 #pragma region Shaders
-	pDevice->CreateVertexShader(General_VS,
-		sizeof(General_VS),
+	pDevice->CreateVertexShader(Trivial_VS,
+		sizeof(Trivial_VS),
 		NULL,
 		&pVertexShader);
-	pDevice->CreatePixelShader(General_PS,
-		sizeof(General_PS),
+	pDevice->CreatePixelShader(Trivial_PS,
+		sizeof(Trivial_PS),
 		NULL,
 		&pPixelShader);
 #pragma endregion
@@ -231,22 +307,52 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	D3D11_INPUT_ELEMENT_DESC vLayout[] =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "TEXTURE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "NORMALS", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-
+		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+		/*{ "TEXTURE", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "NORMALS", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }*/
 	};
 
 	int elements = sizeof(vLayout) / sizeof(vLayout[0]);
 	// TODO: PART 2 STEP 8b
 	pDevice->CreateInputLayout(vLayout,
 		elements,
-		General_VS,
-		sizeof(General_VS),
+		Trivial_VS,
+		sizeof(Trivial_VS),
 		&pInputLayout);
 #pragma endregion
 
 #pragma endregion
+
+	XMMATRIX temp;
+
+	temp = XMMatrixIdentity();
+	XMStoreFloat4x4(&WORLDMATRIX, temp);
+	
+	XMFLOAT4 tempVec = XMFLOAT4(0,0,-2, 1);
+	XMVECTOR pos = XMLoadFloat4(&tempVec);
+	
+	tempVec = XMFLOAT4(0, 0, 1, 1);
+	XMVECTOR focus = XMLoadFloat4(&tempVec);
+
+	tempVec = XMFLOAT4(0, 1, 0, 1);
+	XMVECTOR upDir = XMLoadFloat4(&tempVec);
+
+
+	temp = XMMatrixLookToLH(pos, focus, upDir);
+	XMStoreFloat4x4(&VIEWMATRIX, temp);
+	
+	float Yscale = ((1 / tanf(65 / 2 * (3.14159265f / 180))));
+	float Xscale = Yscale * (BACKBUFFER_WIDTH / BACKBUFFER_HEIGHT);
+	temp = XMMatrixPerspectiveFovLH(Yscale, Xscale, 0.1f, 100.0f);
+	XMStoreFloat4x4(&PROJECTIONMATRIX, temp);
+
+	D3D11_RASTERIZER_DESC DefaultRasterDesc;
+	ZeroMemory(&DefaultRasterDesc, sizeof(DefaultRasterDesc));
+	DefaultRasterDesc.AntialiasedLineEnable = FALSE;
+	DefaultRasterDesc.CullMode = D3D11_CULL_BACK;
+	DefaultRasterDesc.FillMode = D3D11_FILL_SOLID;
+	pDevice->CreateRasterizerState(&DefaultRasterDesc, &pDefaultRasterState);
+
 
 	Time.Restart();
 }
@@ -261,14 +367,40 @@ bool DEMO_APP::Run()
 	pDeviceContext->OMSetRenderTargets(1, &pBackBuffer, pDSV);
 	pDeviceContext->RSSetViewports(1, &MAIN_VIEWPORT);
 
-	float darkBlue[4] = {0.0f,0.0f,0.0f,1.0f};
+	float darkBlue[4] = {0.0f,0.0f,0.50f,1.0f};
 	pDeviceContext->ClearRenderTargetView(pBackBuffer, darkBlue);
+	pDeviceContext->ClearDepthStencilView(pDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+
 	unsigned int stride = sizeof(VERTEX);
 	unsigned int offset = 0;
-	pDeviceContext->IASetVertexBuffers(0, 1, &VertexBufferMap["Bell"], &stride, &offset);
-	pDeviceContext->VSSetShader(pVertexShader, NULL, NULL);
-	pDeviceContext->PSSetShader(pPixelShader, NULL, NULL);
+	pDeviceContext->IASetVertexBuffers(0, 1, &VertexBufferMap, &stride, &offset);
 	pDeviceContext->IASetInputLayout(pInputLayout);
+	pDeviceContext->VSSetShader(pVertexShader, NULL, 0);
+	pDeviceContext->PSSetShader(pPixelShader, NULL, 0);
+	pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	pDeviceContext->VSSetConstantBuffers(0, 1, &pConstantBuffer);
+	pDeviceContext->RSSetState(pDefaultRasterState);
+	pDeviceContext->IASetIndexBuffer(pIndexBuffer,DXGI_FORMAT_R32_UINT,	0);
+
+	D3D11_MAPPED_SUBRESOURCE data;
+	ZeroMemory(&data, sizeof(data));
+
+	pDeviceContext->Map(pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
+	rotation += 1.0f *(float)Time.Delta();
+	XMMATRIX temp = XMLoadFloat4x4(&WORLDMATRIX);
+	temp = XMMatrixRotationY(rotation);
+	XMFLOAT4X4 newMatrix;
+	XMStoreFloat4x4(&newMatrix, temp);
+	toShader.WORLDMATRIX = newMatrix;
+
+	toShader.VIEWMATRIX = VIEWMATRIX;
+
+	toShader.PROJECTIONMATRIX = PROJECTIONMATRIX;
+
+	memcpy(data.pData, &toShader, sizeof(toShader));
+	pDeviceContext->Unmap(pConstantBuffer, 0);
+
+	pDeviceContext->DrawIndexed(60, 0, 0);
 
 	pSwapChain->Present(0,0);
 	return true; 
