@@ -21,6 +21,8 @@
 #include <string>
 #include <DirectXMath.h>
 #include "FBXLoader.h"
+#include "General_VS.csh"
+#include "General_PS.csh"
 
 #pragma comment(lib, "d3d11.lib")
 
@@ -194,9 +196,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 
 #pragma endregion
 
-#pragma endregion
-
-#pragma region Load Buffers
+#pragma region Buffers
 	vector<VERTEX> verts;
 	FBX.LoadFXB(&verts);
 
@@ -216,6 +216,38 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	pDevice->CreateBuffer(&vBuffer, &data, &VertexBufferMap);
 #pragma endregion
 
+#pragma region Shaders
+	pDevice->CreateVertexShader(General_VS,
+		sizeof(General_VS),
+		NULL,
+		&pVertexShader);
+	pDevice->CreatePixelShader(General_PS,
+		sizeof(General_PS),
+		NULL,
+		&pPixelShader);
+#pragma endregion
+
+#pragma region Layouts
+	D3D11_INPUT_ELEMENT_DESC vLayout[] =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "TEXTURE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "NORMALS", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+
+	};
+
+	int elements = sizeof(vLayout) / sizeof(vLayout[0]);
+	// TODO: PART 2 STEP 8b
+	pDevice->CreateInputLayout(vLayout,
+		elements,
+		General_VS,
+		sizeof(General_VS),
+		&pInputLayout);
+#pragma endregion
+
+#pragma endregion
+
 	Time.Restart();
 }
 
@@ -231,6 +263,12 @@ bool DEMO_APP::Run()
 
 	float darkBlue[4] = {0.0f,0.0f,0.0f,1.0f};
 	pDeviceContext->ClearRenderTargetView(pBackBuffer, darkBlue);
+	unsigned int stride = sizeof(VERTEX);
+	unsigned int offset = 0;
+	pDeviceContext->IASetVertexBuffers(0, 1, &VertexBufferMap["Bell"], &stride, &offset);
+	pDeviceContext->VSSetShader(pVertexShader, NULL, NULL);
+	pDeviceContext->PSSetShader(pPixelShader, NULL, NULL);
+	pDeviceContext->IASetInputLayout(pInputLayout);
 
 	pSwapChain->Present(0,0);
 	return true; 
