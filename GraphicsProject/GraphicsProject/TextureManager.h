@@ -1,14 +1,15 @@
 #pragma once
 #include <map>
+#include <string>
 
 using namespace std;
 
-struct ID3D11Texture2D;
+//struct ID3D11Texture2D;
 
 class TextureManager
 {
 	// Map of all textures
-	map<string, ID3D11Texture2D*> pTextures;
+	//map<string, int> pTextures;
 public:
 	TextureManager();
 	~TextureManager();
