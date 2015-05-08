@@ -75,7 +75,7 @@ class DEMO_APP
 	// Buffers
 	ID3D11Buffer* pConstantBuffer;
 	ID3D11Buffer* pIndexBuffer;
-	ID3D11Buffer* VertexBufferMap;
+	map<string,ID3D11Buffer*> VertexBufferMap;
 	// Declaration of Time object for time related use
 	XTime Time;
 
@@ -212,7 +212,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	
 	FBX.LoadFXB(verts);
 	verts.shrink_to_fit();
-
+	
 	VERTEX Star[12];
 
 	Star[0].Position = XMFLOAT4(0, 0, 0.2f, 1);
@@ -282,7 +282,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	vBuffer.CPUAccessFlags = NULL;
 	vBuffer.ByteWidth = sizeof(VERTEX) * verts.size();
 
-	pDevice->CreateBuffer(&vBuffer, &data, &VertexBufferMap);
+	pDevice->CreateBuffer(&vBuffer, &data, &VertexBufferMap["ocean"]);
 
 	// Constant Buffer
 	D3D11_BUFFER_DESC cBufferData;
@@ -377,7 +377,7 @@ bool DEMO_APP::Run()
 
 	unsigned int stride = sizeof(VERTEX);
 	unsigned int offset = 0;
-	pDeviceContext->IASetVertexBuffers(0, 1, &VertexBufferMap, &stride, &offset);
+	pDeviceContext->IASetVertexBuffers(0, 1, &VertexBufferMap["ocean"], &stride, &offset);
 	pDeviceContext->IASetInputLayout(pInputLayout);
 	pDeviceContext->VSSetShader(pVertexShader, NULL, 0);
 	pDeviceContext->PSSetShader(pPixelShader, NULL, 0);
@@ -422,8 +422,14 @@ bool DEMO_APP::ShutDown()
 	pSwapChain->Release();
 	pDevice->Release();
 	pDeviceContext->Release();
-
+	pDefaultRasterState->Release();
+	pIndexBuffer->Release();
+	pInputLayout->Release();
+	pPixelShader->Release();
+	pVertexShader->Release();
 	pBackBuffer->Release();
+	pConstantBuffer->Release();
+	VertexBufferMap["ocean"]->Release();
 	pDepthStencil->Release();
 	pDSV->Release();
 
