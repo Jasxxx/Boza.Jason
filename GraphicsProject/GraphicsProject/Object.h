@@ -11,6 +11,7 @@ class Object
 private:
 	XMFLOAT3 mPosition;
 	vector<VERTEX>* mGeometry;
+	vector<unsigned int> mIndecies;
 	string mTextureName;
 	XMFLOAT4X4 WorldMatrix;
 

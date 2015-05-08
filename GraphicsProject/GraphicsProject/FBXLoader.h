@@ -11,12 +11,12 @@ FbxManager* FBXM = nullptr;
 class FBXLoader
 {
 public:
-HRESULT LoadFXB(vector<VERTEX>* Vertecies);
+	HRESULT LoadFXB(vector<VERTEX>& Vertecies);
 };
 
 // Read fbx file and load mesh
 // Takes output parameter and filling it with a vector of vertecies
-HRESULT FBXLoader::LoadFXB(vector<VERTEX>* Vertecies)
+HRESULT FBXLoader::LoadFXB(vector<VERTEX>& Vertecies)
 {
 	// If not made yet create FbxManager and set the settings to what we want to load in
 	if (FBXM == nullptr)
@@ -31,7 +31,7 @@ HRESULT FBXLoader::LoadFXB(vector<VERTEX>* Vertecies)
 	FbxScene* pScene = FbxScene::Create(FBXM, "");
 
 	// Open file
-	bool bSuccess = pImporter->Initialize("cone.fbx", -1, FBXM->GetIOSettings());
+	bool bSuccess = pImporter->Initialize("Ocean.fbx", -1, FBXM->GetIOSettings());
 	if (!bSuccess)
 		return E_FAIL;
 
@@ -66,7 +66,6 @@ HRESULT FBXLoader::LoadFXB(vector<VERTEX>* Vertecies)
 
 			// Control Points is the same as positions
 			FbxVector4* pVerts = pMesh->GetControlPoints();
-			//FbxVector2* pUV = pMesh->GetTextureUV();
 
 			for (int CurrPoly = 0; CurrPoly < pMesh->GetPolygonCount(); CurrPoly++)
 			{
@@ -79,20 +78,108 @@ HRESULT FBXLoader::LoadFXB(vector<VERTEX>* Vertecies)
 				{
 					// get the index of the polygon
 					int ControlPointIndex = pMesh->GetPolygonVertex(CurrPoly, vertIndex);
-
+					FbxVector2 pTexts;
+					bool hi;
+					pMesh->GetPolygonVertexUV(CurrPoly, vertIndex, NULL, pTexts, hi);
+					int TextureIndex = pMesh->GetTextureUVIndex(CurrPoly, vertIndex);
 					// get the positions of the fbx verts and fill our struct
 					VERTEX tempVert;
 					tempVert.Position.x = (float)pVerts[ControlPointIndex].mData[0];
 					tempVert.Position.y = (float)pVerts[ControlPointIndex].mData[1];
 					tempVert.Position.z = (float)pVerts[ControlPointIndex].mData[2];
 					tempVert.Position.w = 1;
-					//tempVert.Color = XMFLOAT4(1, 1, 1, 1);
-					/*tempVert.Normal = XMFLOAT2(0, 0);
-					tempVert.TextureCoord = XMFLOAT2(0,0);*/
-					Vertecies->push_back(tempVert);
+					tempVert.Color = XMFLOAT4(1, 1, 1, 1);
+					tempVert.TextureCoord.x = (float)pTexts.mData[0];
+					tempVert.TextureCoord.y = (float)pTexts.mData[1];
+
+					//tempVert.Normal = (float)pVerts;
+					Vertecies.push_back(tempVert);
+				}
+			}
+#pragma region getting texture data
+
+			FbxStringList lUVSetNameList;
+			pMesh->GetUVSetNames(lUVSetNameList);
+
+			//iterating over all uv sets
+			for (int lUVSetIndex = 0; lUVSetIndex < lUVSetNameList.GetCount(); lUVSetIndex++)
+			{
+				//get lUVSetIndex-th uv set
+				const char* lUVSetName = lUVSetNameList.GetStringAt(lUVSetIndex);
+				const FbxGeometryElementUV* lUVElement = pMesh->GetElementUV(lUVSetName);
+
+				if (!lUVElement)
+					continue;
+
+				// only support mapping mode eByPolygonVertex and eByControlPoint
+				if (lUVElement->GetMappingMode() != FbxGeometryElement::eByPolygonVertex &&
+					lUVElement->GetMappingMode() != FbxGeometryElement::eByControlPoint)
+					break;
+
+				//index array, where holds the index referenced to the uv data
+				const bool lUseIndex = lUVElement->GetReferenceMode() != FbxGeometryElement::eDirect;
+				const int lIndexCount = (lUseIndex) ? lUVElement->GetIndexArray().GetCount() : 0;
+
+				//iterating through the data by polygon
+				const int lPolyCount = pMesh->GetPolygonCount();
+
+				if (lUVElement->GetMappingMode() == FbxGeometryElement::eByControlPoint)
+				{
+					for (int lPolyIndex = 0; lPolyIndex < lPolyCount; ++lPolyIndex)
+					{
+						// build the max index array that we need to pass into MakePoly
+						const int lPolySize = pMesh->GetPolygonSize(lPolyIndex);
+						for (int lVertIndex = 0; lVertIndex < lPolySize; ++lVertIndex)
+						{
+							FbxVector2 lUVValue;
+
+							//get the index of the current vertex in control points array
+							int lPolyVertIndex = pMesh->GetPolygonVertex(lPolyIndex, lVertIndex);
+
+							//the UV index depends on the reference mode
+							int lUVIndex = lUseIndex ? lUVElement->GetIndexArray().GetAt(lPolyVertIndex) : lPolyVertIndex;
+
+							lUVValue = lUVElement->GetDirectArray().GetAt(lUVIndex);
+
+							//User TODO:
+							//Print out the value of UV(lUVValue) or log it to a file
+							Vertecies[lVertIndex].TextureCoord.x = (float)lUVValue.mData[0];
+							Vertecies[lVertIndex].TextureCoord.y = (float)lUVValue.mData[1];
+						}
+					}
+				}
+				else if (lUVElement->GetMappingMode() == FbxGeometryElement::eByPolygonVertex)
+				{
+					int lPolyIndexCounter = 0;
+					for (int lPolyIndex = 0; lPolyIndex < lPolyCount; ++lPolyIndex)
+					{
+						// build the max index array that we need to pass into MakePoly
+						const int lPolySize = pMesh->GetPolygonSize(lPolyIndex);
+						for (int lVertIndex = 0; lVertIndex < lPolySize; ++lVertIndex)
+						{
+							if (lPolyIndexCounter < lIndexCount)
+							{
+								FbxVector2 lUVValue;
+
+								//the UV index depends on the reference mode
+								int lUVIndex = lUseIndex ? lUVElement->GetIndexArray().GetAt(lPolyIndexCounter) : lPolyIndexCounter;
+
+								lUVValue = lUVElement->GetDirectArray().GetAt(lUVIndex);
+
+								//User TODO:
+								//Print out the value of UV(lUVValue) or log it to a file
+								Vertecies[lVertIndex].TextureCoord.x = (float)lUVValue.mData[0];
+								Vertecies[lVertIndex].TextureCoord.y = (float)lUVValue.mData[1];
+
+								lPolyIndexCounter++;
+							}
+						}
+					}
 				}
 			}
 		}
 	}
-		return S_OK;
+
+#pragma endregion
+	return S_OK;
 }

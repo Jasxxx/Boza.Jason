@@ -9,6 +9,6 @@ struct VERTEX
 {
 	XMFLOAT4 Position;
 	XMFLOAT4 Color;
-	/*XMFLOAT2 TextureCoord;
-	XMFLOAT2 Normal;*/
+	XMFLOAT2 TextureCoord;
+	//XMFLOAT2 Normal;
 };

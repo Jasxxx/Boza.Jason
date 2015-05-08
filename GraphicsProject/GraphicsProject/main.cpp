@@ -210,7 +210,8 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 
 #pragma region Buffers
 	
-	FBX.LoadFXB(&verts);
+	FBX.LoadFXB(verts);
+	verts.shrink_to_fit();
 
 	VERTEX Star[12];
 
@@ -236,6 +237,12 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	Star[11].Position = XMFLOAT4(0, 0, -0.2f, 1);
 	Star[11].Color = XMFLOAT4(0, 1, 0, 1);
 
+	/*unsigned int CubeIndicies* = new unsigned int[verts.size()];
+	for (unsigned int  i = 0; i < 36; i++)
+	{
+		CubeIndicies[i] = i;
+	}
+*/
 	unsigned int StarIndecies[60] =
 	{
 		0, 1, 2, 0, 2, 3, 0, 3, 4,
@@ -264,7 +271,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 
 	D3D11_SUBRESOURCE_DATA data;
 	ZeroMemory(&data, sizeof(data));
-	data.pSysMem = &Star;
+	data.pSysMem = &verts[0];
 	data.SysMemPitch = 0;
 	data.SysMemSlicePitch = 0;
 
@@ -273,7 +280,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	vBuffer.Usage = D3D11_USAGE_IMMUTABLE;
 	vBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vBuffer.CPUAccessFlags = NULL;
-	vBuffer.ByteWidth = sizeof(VERTEX) * ARRAYSIZE(Star);
+	vBuffer.ByteWidth = sizeof(VERTEX) * verts.size();
 
 	pDevice->CreateBuffer(&vBuffer, &data, &VertexBufferMap);
 
@@ -313,7 +320,6 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	};
 
 	int elements = sizeof(vLayout) / sizeof(vLayout[0]);
-	// TODO: PART 2 STEP 8b
 	pDevice->CreateInputLayout(vLayout,
 		elements,
 		Trivial_VS,
@@ -328,7 +334,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	temp = XMMatrixIdentity();
 	XMStoreFloat4x4(&WORLDMATRIX, temp);
 	
-	XMFLOAT4 tempVec = XMFLOAT4(0,0,-2, 1);
+	XMFLOAT4 tempVec = XMFLOAT4(0,0.5f,-3, 1);
 	XMVECTOR pos = XMLoadFloat4(&tempVec);
 	
 	tempVec = XMFLOAT4(0, 0, 1, 1);
@@ -341,9 +347,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	temp = XMMatrixLookToLH(pos, focus, upDir);
 	XMStoreFloat4x4(&VIEWMATRIX, temp);
 	
-	float Yscale = ((1 / tanf(65 / 2 * (3.14159265f / 180))));
-	float Xscale = Yscale * (BACKBUFFER_WIDTH / BACKBUFFER_HEIGHT);
-	temp = XMMatrixPerspectiveFovLH(Yscale, Xscale, 0.1f, 100.0f);
+	temp = XMMatrixPerspectiveFovLH(65 * (XM_PI / 180), (BACKBUFFER_WIDTH / BACKBUFFER_HEIGHT), 0.1f, 100.0f);
 	XMStoreFloat4x4(&PROJECTIONMATRIX, temp);
 
 	D3D11_RASTERIZER_DESC DefaultRasterDesc;
@@ -386,21 +390,24 @@ bool DEMO_APP::Run()
 	ZeroMemory(&data, sizeof(data));
 
 	pDeviceContext->Map(pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
-	rotation += 1.0f *(float)Time.Delta();
+	//rotation += 1.0f *(float)Time.Delta();
 	XMMATRIX temp = XMLoadFloat4x4(&WORLDMATRIX);
-	temp = XMMatrixRotationY(rotation);
+	//temp = XMMatrixRotationY(rotation);
 	XMFLOAT4X4 newMatrix;
 	XMStoreFloat4x4(&newMatrix, temp);
 	toShader.WORLDMATRIX = newMatrix;
 
-	toShader.VIEWMATRIX = VIEWMATRIX;
+ 	temp = XMLoadFloat4x4(&VIEWMATRIX);
+	XMMatrixInverse(NULL, temp);
+	XMStoreFloat4x4(&newMatrix, temp);
+	toShader.VIEWMATRIX = newMatrix;
 
 	toShader.PROJECTIONMATRIX = PROJECTIONMATRIX;
 
 	memcpy(data.pData, &toShader, sizeof(toShader));
 	pDeviceContext->Unmap(pConstantBuffer, 0);
 
-	pDeviceContext->DrawIndexed(60, 0, 0);
+	pDeviceContext->Draw(verts.size(), 0);
 
 	pSwapChain->Present(0,0);
 	return true; 
