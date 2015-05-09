@@ -60,5 +60,6 @@
   <ItemGroup>
     <FxCompile Include="Trivial_PS.hlsl" />
     <FxCompile Include="Trivial_VS.hlsl" />
+    <FxCompile Include="General_PS.hlsl" />
   </ItemGroup>
 </Project>

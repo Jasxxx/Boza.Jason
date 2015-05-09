@@ -80,20 +80,7 @@ HRESULT FBXLoader::LoadFXB(vector<VERTEX>& Vertecies)
 				// check position of vert
 				for (int vertIndex = 0; vertIndex < NumVerts; vertIndex++)
 				{
-					//FbxVector2 lUVValue;
-
-					////the UV index depends on the reference mode
-					//int lUVIndex = lUseIndex ? lUVElement->GetIndexArray().GetAt(lPolyIndexCounter) : lPolyIndexCounter;
-
-					//lUVValue = lUVElement->GetDirectArray().GetAt(lUVIndex);
-
-					////User TODO:
-					////Print out the value of UV(lUVValue) or log it to a file
-					//Vertecies[lVertIndex].TextureCoord.x = (float)lUVValue.mData[0];
-					//Vertecies[lVertIndex].TextureCoord.y = (float)lUVValue.mData[1];
-
-					//lPolyIndexCounter++;
-
+				
 					// get the index of the polygon
 					int ControlPointIndex = pMesh->GetPolygonVertex(CurrPoly, vertIndex);
 					int TextureIndex = pMesh->GetTextureUVIndex(CurrPoly, vertIndex);
@@ -108,103 +95,16 @@ HRESULT FBXLoader::LoadFXB(vector<VERTEX>& Vertecies)
 					XMFLOAT2 pUV;
 					XMFLOAT3 pNormal;
 
-					ReadUV(pMesh, ControlPointIndex, vertIndex, pUV);
+					ReadUV(pMesh, CurrPoly, vertIndex, pUV);
 
-					/*tempVert.TextureCoord.x =
-					tempVert.TextureCoord.y =*/
+					tempVert.TextureCoord.x = pUV.x;
+					tempVert.TextureCoord.y = 1.0f - pUV.y;
 
 
 					//tempVert.Normal = (float)pVerts;
 					Vertecies.push_back(tempVert);
 				}
 			}
-#pragma region getting texture data
-
-			//FbxStringList lUVSetNameList;
-			//pMesh->GetUVSetNames(lUVSetNameList);
-
-			////iterating over all uv sets
-			//for (int lUVSetIndex = 0; lUVSetIndex < lUVSetNameList.GetCount(); lUVSetIndex++)
-			//{
-			//	//get lUVSetIndex-th uv set
-			//	const char* lUVSetName = lUVSetNameList.GetStringAt(lUVSetIndex);
-			//	const FbxGeometryElementUV* lUVElement = pMesh->GetElementUV(lUVSetName);
-
-			//	if (!lUVElement)
-			//		continue;
-
-			//	// only support mapping mode eByPolygonVertex and eByControlPoint
-			//	if (lUVElement->GetMappingMode() != FbxGeometryElement::eByPolygonVertex &&
-			//		lUVElement->GetMappingMode() != FbxGeometryElement::eByControlPoint)
-			//		break;
-
-			//	for (int i = 0; i < UVSetName; i++)
-			//	{
-
-			//	}
-
-			//	//index array, where holds the index referenced to the uv data
-			//	const bool lUseIndex = lUVElement->GetReferenceMode() != FbxGeometryElement::eDirect;
-			//	const int lIndexCount = (lUseIndex) ? lUVElement->GetIndexArray().GetCount() : 0;
-
-			//	//iterating through the data by polygon
-			//	const int lPolyCount = pMesh->GetPolygonCount();
-
-			//	if (lUVElement->GetMappingMode() == FbxGeometryElement::eByControlPoint)
-			//	{
-			//		for (int lPolyIndex = 0; lPolyIndex < lPolyCount; ++lPolyIndex)
-			//		{
-			//			// build the max index array that we need to pass into MakePoly
-			//			const int lPolySize = pMesh->GetPolygonSize(lPolyIndex);
-			//			for (int lVertIndex = 0; lVertIndex < lPolySize; ++lVertIndex)
-			//			{
-			//				FbxVector2 lUVValue;
-
-			//				//get the index of the current vertex in control points array
-			//				int lPolyVertIndex = pMesh->GetPolygonVertex(lPolyIndex, lVertIndex);
-
-			//				//the UV index depends on the reference mode
-			//				int lUVIndex = lUseIndex ? lUVElement->GetIndexArray().GetAt(lPolyVertIndex) : lPolyVertIndex;
-
-			//				lUVValue = lUVElement->GetDirectArray().GetAt(lUVIndex);
-
-			//				//User TODO:
-			//				//Print out the value of UV(lUVValue) or log it to a file
-			//				Vertecies[lVertIndex].TextureCoord.x = (float)lUVValue.mData[0];
-			//				Vertecies[lVertIndex].TextureCoord.y = (float)lUVValue.mData[1];
-			//			}
-			//		}
-			//	}
-			//	else if (lUVElement->GetMappingMode() == FbxGeometryElement::eByPolygonVertex)
-			//	{
-			//		int lPolyIndexCounter = 0;
-			//		for (int lPolyIndex = 0; lPolyIndex < lPolyCount; ++lPolyIndex)
-			//		{
-			//			// build the max index array that we need to pass into MakePoly
-			//			const int lPolySize = pMesh->GetPolygonSize(lPolyIndex);
-			//			for (int lVertIndex = 0; lVertIndex < lPolySize; ++lVertIndex)
-			//			{
-			//				if (lPolyIndexCounter < lIndexCount)
-			//				{
-			//					FbxVector2 lUVValue;
-
-			//					//the UV index depends on the reference mode
-			//					int lUVIndex = lUseIndex ? lUVElement->GetIndexArray().GetAt(lPolyIndexCounter) : lPolyIndexCounter;
-
-			//					lUVValue = lUVElement->GetDirectArray().GetAt(lUVIndex);
-
-			//					//User TODO:
-			//					//Print out the value of UV(lUVValue) or log it to a file
-			//					Vertecies[lVertIndex].TextureCoord.x = (float)lUVValue.mData[0];
-			//					Vertecies[lVertIndex].TextureCoord.y = (float)lUVValue.mData[1];
-
-			//					lPolyIndexCounter++;
-			//				}
-			//			}
-			//		}
-			//	}
-			//}
-#pragma endregion
 		}
 	}
 
@@ -226,102 +126,12 @@ void FBXLoader::ReadUV(FbxMesh* pMesh, int ControlPointIndex, int VertexIndex, X
 		// Is the element null
 		if (!lUVElement)
 			continue;
+		
+		FbxVector2 lUVValue = lUVElement->GetDirectArray().GetAt(UVIndex);
 
-		// only support mapping mode eByPolygonVertex and eByControlPoint
-		// Current understanding is that games use these mapping modes so for now just accept it
-		if (lUVElement->GetMappingMode() != FbxGeometryElement::eByPolygonVertex &&
-			lUVElement->GetMappingMode() != FbxGeometryElement::eByControlPoint)
-			return;
-
-		//index array, where holds the index referenced to the uv data
-		const bool lUseIndex = lUVElement->GetReferenceMode() != FbxGeometryElement::eDirect;
-		const int lIndexCount = (lUseIndex) ? lUVElement->GetIndexArray().GetCount() : 0;
-
-		//iterating through the data by polygon
-		const int lPolyCount = pMesh->GetPolygonCount();
-
+		pUV.x = (float)lUVValue.mData[0];
+		pUV.y = (float)lUVValue.mData[1];
 	}
-
-	FbxLayerElementUV* vertexUV = pMesh->GetElementUV();
-	//void LoadUVInformation(FbxMesh* pMesh)
-	//{
-	//	//get all UV set names
-	//	FbxStringList lUVSetNameList;
-	//	pMesh->GetUVSetNames(lUVSetNameList);
-
-	//	//iterating over all uv sets
-	//	for (int lUVSetIndex = 0; lUVSetIndex < lUVSetNameList.GetCount(); lUVSetIndex++)
-	//	{
-	//		//get lUVSetIndex-th uv set
-	//		const char* lUVSetName = lUVSetNameList.GetStringAt(lUVSetIndex);
-	//		const FbxGeometryElementUV* lUVElement = pMesh->GetElementUV(lUVSetName);
-
-	//		if (!lUVElement)
-	//			continue;
-
-	//		// only support mapping mode eByPolygonVertex and eByControlPoint
-	//		if (lUVElement->GetMappingMode() != FbxGeometryElement::eByPolygonVertex &&
-	//			lUVElement->GetMappingMode() != FbxGeometryElement::eByControlPoint)
-	//			return;
-
-	//		//index array, where holds the index referenced to the uv data
-	//		const bool lUseIndex = lUVElement->GetReferenceMode() != FbxGeometryElement::eDirect;
-	//		const int lIndexCount = (lUseIndex) ? lUVElement->GetIndexArray().GetCount() : 0;
-
-	//		//iterating through the data by polygon
-	//		const int lPolyCount = pMesh->GetPolygonCount();
-
-	//		if (lUVElement->GetMappingMode() == FbxGeometryElement::eByControlPoint)
-	//		{
-	//			for (int lPolyIndex = 0; lPolyIndex < lPolyCount; ++lPolyIndex)
-	//			{
-	//				// build the max index array that we need to pass into MakePoly
-	//				const int lPolySize = pMesh->GetPolygonSize(lPolyIndex);
-	//				for (int lVertIndex = 0; lVertIndex < lPolySize; ++lVertIndex)
-	//				{
-	//					FbxVector2 lUVValue;
-
-	//					//get the index of the current vertex in control points array
-	//					int lPolyVertIndex = pMesh->GetPolygonVertex(lPolyIndex, lVertIndex);
-
-	//					//the UV index depends on the reference mode
-	//					int lUVIndex = lUseIndex ? lUVElement->GetIndexArray().GetAt(lPolyVertIndex) : lPolyVertIndex;
-
-	//					lUVValue = lUVElement->GetDirectArray().GetAt(lUVIndex);
-
-	//					//User TODO:
-	//					//Print out the value of UV(lUVValue) or log it to a file
-	//				}
-	//			}
-	//		}
-	//		else if (lUVElement->GetMappingMode() == FbxGeometryElement::eByPolygonVertex)
-	//		{
-	//			int lPolyIndexCounter = 0;
-	//			for (int lPolyIndex = 0; lPolyIndex < lPolyCount; ++lPolyIndex)
-	//			{
-	//				// build the max index array that we need to pass into MakePoly
-	//				const int lPolySize = pMesh->GetPolygonSize(lPolyIndex);
-	//				for (int lVertIndex = 0; lVertIndex < lPolySize; ++lVertIndex)
-	//				{
-	//					if (lPolyIndexCounter < lIndexCount)
-	//					{
-	//						FbxVector2 lUVValue;
-
-	//						//the UV index depends on the reference mode
-	//						int lUVIndex = lUseIndex ? lUVElement->GetIndexArray().GetAt(lPolyIndexCounter) : lPolyIndexCounter;
-
-	//						lUVValue = lUVElement->GetDirectArray().GetAt(lUVIndex);
-
-	//						//User TODO:
-	//						//Print out the value of UV(lUVValue) or log it to a file
-
-	//						lPolyIndexCounter++;
-	//					}
-	//				}
-	//			}
-	//		}
-	//	}
-	//}
 
 }
 

@@ -4,11 +4,13 @@ struct INPUT_VERTEX
 {
 	float4 coordinate : POSITION;
 	float4 color : COLOR;
+	float2 uv : TEXTURE;
 };
 
 struct OUTPUT_VERTEX
 {
 	float4 colorOut : COLOR;
+	float2 textureCoords : TEXTURE;
 	float4 projectedCoordinate : SV_POSITION;
 };
 
@@ -32,9 +34,8 @@ OUTPUT_VERTEX main( INPUT_VERTEX fromVertexBuffer )
 	vertex = mul(vertex, PROJECTIONMATRIX);
 	
 	sendToRasterizer.projectedCoordinate = vertex;
-
 	sendToRasterizer.colorOut = fromVertexBuffer.color;
-	// END PART 3
+	sendToRasterizer.textureCoords = fromVertexBuffer.uv;
 
 	return sendToRasterizer;
 }
