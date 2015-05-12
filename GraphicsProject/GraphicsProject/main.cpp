@@ -1,13 +1,8 @@
-// D3D LAB 1a "Line Land".
-// Author: L.Norri CD DRX, FullSail University
+// Graphics 2 Demo Project.
+// Author: Jason Boza
 
-// Introduction:
-// Welcome to the first lab of the Direct3D Graphics Programming class.
-// This is the ONLY guided lab in this course! 
-// Future labs will demand the habits & foundation you develop right now!  
-// It is CRITICAL that you follow each and every step. ESPECIALLY THE READING!!!
-
-// TO BEGIN: Open the word document that acompanies this lab and start from the top.
+// Reference http://www.rastertek.com/dx11tut10.html
+// Reference http://www.braynzarsoft.net/index.php?p=D3D11SIMPLELIGHT#still
 
 //************************************************************
 //************ INCLUDES & DEFINES ****************************
@@ -77,6 +72,7 @@ class DEMO_APP
 
 	// Buffers
 	ID3D11Buffer* pConstantBuffer;
+	ID3D11Buffer* pConstantLightBuffer;
 	ID3D11Buffer* pIndexBuffer;
 	map<string, ID3D11Buffer*> VertexBufferMap;
 
@@ -93,16 +89,31 @@ class DEMO_APP
 		XMFLOAT4X4 WORLDMATRIX;
 		XMFLOAT4X4 VIEWMATRIX;
 		XMFLOAT4X4 PROJECTIONMATRIX;
+		XMFLOAT3 CameraPosition;
+		float padding;
+	};
+
+	struct Light
+	{
+		XMFLOAT3 dir;
+		float specularPower;
+		XMFLOAT4 ambient;
+		XMFLOAT4 diffuse;
+		XMFLOAT4 specular;
 	};
 
 	SEND_TO_VRAM toShader;
+	Light lightToShader;
 public:
 	DEMO_APP(HINSTANCE hinst, WNDPROC proc);
 	bool Run();
 	bool ShutDown();
 	float rotation = 0;
+	float lightChange = 0.0f;
+	float change = 0.001f;
 	void Input();
 	void UpdateCamera();
+	void SetLight();
 };
 
 //************************************************************
@@ -311,7 +322,6 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	D3D11_BUFFER_DESC cBufferData;
 	ZeroMemory(&cBufferData, sizeof(cBufferData));
 	cBufferData.ByteWidth = sizeof(SEND_TO_VRAM);
-	// TODO: PART 3 STEP 4b
 	cBufferData.Usage = D3D11_USAGE_DYNAMIC;
 	cBufferData.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	cBufferData.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -320,6 +330,20 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	ZeroMemory(&cData, sizeof(cData));
 	cData.pSysMem = &toShader;
 	pDevice->CreateBuffer(&cBufferData, &cData, &pConstantBuffer);
+
+	float s = sizeof(Light);
+	//ZeroMemory(&pConstantLightBuffer, sizeof(pConstantLightBuffer));
+	D3D11_BUFFER_DESC cLightBuffer;
+	ZeroMemory(&cLightBuffer, sizeof(cLightBuffer));
+	cLightBuffer.ByteWidth = sizeof(Light);
+	cLightBuffer.Usage = D3D11_USAGE_DYNAMIC;
+	cLightBuffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cLightBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	D3D11_SUBRESOURCE_DATA cLightData;
+	ZeroMemory(&cLightData, sizeof(cLightData));
+	cLightData.pSysMem = &lightToShader;
+	pDevice->CreateBuffer(&cLightBuffer, &cLightData, &pConstantLightBuffer);
 #pragma endregion
 
 #pragma region Shaders
@@ -342,8 +366,8 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "TEXTURE", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
-		//{ "NORMALS", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+		{ "TEXTURE", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 
 	int elements = sizeof(vLayout) / sizeof(vLayout[0]);
@@ -417,7 +441,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 bool DEMO_APP::Run()
 {
 	Time.Signal();
-
+	SetLight();
 	Input();
 
 	pDeviceContext->OMSetRenderTargets(1, &pBackBuffer, pDSV);
@@ -434,11 +458,12 @@ bool DEMO_APP::Run()
 	pDeviceContext->VSSetShader(pVertexShader, NULL, 0);
 	pDeviceContext->PSSetShader(pPixelShader, NULL, 0);
 	pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	pDeviceContext->VSSetConstantBuffers(0, 1, &pConstantBuffer);
 	pDeviceContext->RSSetState(pDefaultRasterState);
 	pDeviceContext->IASetIndexBuffer(pIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 	pDeviceContext->PSSetShaderResources(0, 1, &SRV);
 	pDeviceContext->PSSetSamplers(0, 1, &pTextureSamplerState);
+	pDeviceContext->VSSetConstantBuffers(0, 1, &pConstantBuffer);
+	pDeviceContext->PSSetConstantBuffers(0, 1, &pConstantLightBuffer);
 
 	D3D11_MAPPED_SUBRESOURCE data;
 	ZeroMemory(&data, sizeof(data));
@@ -461,6 +486,12 @@ bool DEMO_APP::Run()
 	memcpy(data.pData, &toShader, sizeof(toShader));
 	pDeviceContext->Unmap(pConstantBuffer, 0);
 
+#pragma region map light
+	pDeviceContext->Map(pConstantLightBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
+	memcpy(data.pData, &lightToShader, sizeof(lightToShader));
+	pDeviceContext->Unmap(pConstantLightBuffer, 0);
+#pragma endregion
+
 	pDeviceContext->Draw(verts.size(), 0);
 
 	pDeviceContext->Map(pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
@@ -476,13 +507,15 @@ bool DEMO_APP::Run()
 	toShader.VIEWMATRIX = newMatrix;
 
 	toShader.PROJECTIONMATRIX = PROJECTIONMATRIX;
+	toShader.CameraPosition = XMFLOAT3(VIEWMATRIX._41, VIEWMATRIX._42, VIEWMATRIX._43);
+	toShader.padding = 0.0f;
 
 	memcpy(data.pData, &toShader, sizeof(toShader));
 	pDeviceContext->Unmap(pConstantBuffer, 0);
 
 	pDeviceContext->PSSetShader(pNonTexturedPixelShader, NULL, 0);
 	pDeviceContext->IASetVertexBuffers(0, 1, &VertexBufferMap["star"], &stride, &offset);
-	pDeviceContext->DrawIndexed(60,0,0);
+	pDeviceContext->DrawIndexed(60, 0, 0);
 
 	pSwapChain->Present(0, 0);
 	return true;
@@ -510,6 +543,7 @@ bool DEMO_APP::ShutDown()
 	pDefaultRasterState->Release();
 	//pBlendState->Release();
 	pConstantBuffer->Release();
+	pConstantLightBuffer->Release();
 	VertexBufferMap["ocean"]->Release();
 	VertexBufferMap["star"]->Release();
 
@@ -562,7 +596,7 @@ void DEMO_APP::Input()
 
 	// forward
 	if (GetAsyncKeyState('W'))
-		Transform =	XMMatrixTranslation(0.0f, 0.0f, -(float)Time.Delta());
+		Transform = XMMatrixTranslation(0.0f, 0.0f, -(float)Time.Delta());
 	// back
 	if (GetAsyncKeyState('S'))
 		Transform = XMMatrixTranslation(0.0f, 0.0f, (float)Time.Delta());
@@ -614,4 +648,27 @@ void DEMO_APP::UpdateCamera()
 	Transform = XMMatrixIdentity();
 	RotateX = 0.0f;
 	RotateY = 0.0f;
+}
+
+void DEMO_APP::SetLight()
+{
+	
+	if (lightChange >= 1.0f)
+	{
+		lightChange = 1.0f;
+		change = - 0.001f;
+	}
+	if (lightChange <= 0.0f)
+	{
+		lightChange = 0.0f;
+		change = 0.001f;
+	}
+
+	lightChange += change;
+
+	lightToShader.dir = XMFLOAT3(0.25f, 1.0f, 0.0f);
+	lightToShader.ambient = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+	lightToShader.diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	lightToShader.specular = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+	lightToShader.specularPower = 32.0f;
 }

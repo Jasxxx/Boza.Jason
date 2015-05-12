@@ -96,12 +96,13 @@ HRESULT FBXLoader::LoadFXB(vector<VERTEX>& Vertecies)
 					XMFLOAT3 pNormal;
 
 					ReadUV(pMesh, CurrPoly, vertIndex, pUV);
-
+					ReadNormal(pMesh, CurrPoly, vertIndex, pNormal);
 					tempVert.TextureCoord.x = pUV.x;
 					tempVert.TextureCoord.y = 1.0f - pUV.y;
+					tempVert.Normal.x = pNormal.x;
+					tempVert.Normal.y = pNormal.y;
+					tempVert.Normal.z = pNormal.z;
 
-
-					//tempVert.Normal = (float)pVerts;
 					Vertecies.push_back(tempVert);
 				}
 			}
@@ -137,5 +138,9 @@ void FBXLoader::ReadUV(FbxMesh* pMesh, int ControlPointIndex, int VertexIndex, X
 
 void FBXLoader::ReadNormal(FbxMesh* pMesh, int ControlPointIndex, int VertexIndex, XMFLOAT3& pNormals)
 {
-
+	FbxGeometryElementNormal* Normal = pMesh->GetElementNormal(0);
+	//int index = Normal->GetIndexArray().GetAt(0);
+	pNormals.x = (float)Normal->GetDirectArray().GetAt(ControlPointIndex).mData[0];
+	pNormals.y = (float)Normal->GetDirectArray().GetAt(ControlPointIndex).mData[1];
+	pNormals.z = (float)Normal->GetDirectArray().GetAt(ControlPointIndex).mData[2];
 }
