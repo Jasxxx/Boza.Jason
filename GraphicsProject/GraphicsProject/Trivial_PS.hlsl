@@ -24,7 +24,7 @@ cbuffer Light : register (b0)
 
 float4 main(OUTPUT_VERTEX input) : SV_TARGET
 {
-	float4 newSpecular = specular;
+	float4 newSpecular = float4(0.0f,0.0f,0.0f,0.0f);
 
 	// get texture color from uvs
 	float4 TextureColor = baseTexture.Sample(filter, input.textureCoords.xy);
@@ -33,7 +33,7 @@ float4 main(OUTPUT_VERTEX input) : SV_TARGET
 	// invert light direction for calculations
 	float3 lightDir = -dir;
 	// amount of light on the pixel
-	float lightIntensity = saturate(dot(input.normalOut, lightDir));
+	float lightIntensity = saturate(dot(input.normalOut,lightDir));
 	
 	if (lightIntensity > 0.0f)
 	{

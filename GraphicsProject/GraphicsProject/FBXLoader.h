@@ -35,7 +35,7 @@ HRESULT FBXLoader::LoadFXB(vector<VERTEX>& Vertecies)
 	FbxScene* pScene = FbxScene::Create(FBXM, "");
 
 	// Open file
-	bool bSuccess = pImporter->Initialize("Ocean.fbx", -1, FBXM->GetIOSettings());
+	bool bSuccess = pImporter->Initialize("ocean.fbx", -1, FBXM->GetIOSettings());
 	if (!bSuccess)
 		return E_FAIL;
 
@@ -83,6 +83,7 @@ HRESULT FBXLoader::LoadFXB(vector<VERTEX>& Vertecies)
 				
 					// get the index of the polygon
 					int ControlPointIndex = pMesh->GetPolygonVertex(CurrPoly, vertIndex);
+					int PolygonIndex = pMesh->GetPolygonVertexIndex(CurrPoly);
 					int TextureIndex = pMesh->GetTextureUVIndex(CurrPoly, vertIndex);
 					// get the positions of the fbx verts and fill our struct
 					VERTEX tempVert;
@@ -96,7 +97,7 @@ HRESULT FBXLoader::LoadFXB(vector<VERTEX>& Vertecies)
 					XMFLOAT3 pNormal;
 
 					ReadUV(pMesh, CurrPoly, vertIndex, pUV);
-					ReadNormal(pMesh, CurrPoly, vertIndex, pNormal);
+					ReadNormal(pMesh, PolygonIndex, vertIndex, pNormal);
 					tempVert.TextureCoord.x = pUV.x;
 					tempVert.TextureCoord.y = 1.0f - pUV.y;
 					tempVert.Normal.x = pNormal.x;

@@ -35,6 +35,7 @@ OUTPUT_VERTEX main( INPUT_VERTEX fromVertexBuffer )
 	float4 vertex = fromVertexBuffer.coordinate;
 
 	vertex = mul(vertex, WORLDMATRIX);
+	sendToRasterizer.ViewDir = CamPos - vertex.xyz;
 	vertex = mul(vertex, VIEWMATRIX);
 	vertex = mul(vertex, PROJECTIONMATRIX);
 	
@@ -42,8 +43,7 @@ OUTPUT_VERTEX main( INPUT_VERTEX fromVertexBuffer )
 	sendToRasterizer.colorOut = fromVertexBuffer.color;
 	sendToRasterizer.textureCoords = fromVertexBuffer.uv;
 
-	sendToRasterizer.normalOut = mul(fromVertexBuffer.normal, WORLDMATRIX);
-	sendToRasterizer.ViewDir = CamPos - fromVertexBuffer.coordinate.xyz;
+	sendToRasterizer.normalOut = mul(fromVertexBuffer.normal, (float3x3)WORLDMATRIX);
 	sendToRasterizer.ViewDir = normalize(sendToRasterizer.ViewDir);
 
 	return sendToRasterizer;

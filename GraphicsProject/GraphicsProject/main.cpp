@@ -384,7 +384,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	temp = XMMatrixIdentity();
 	XMStoreFloat4x4(&WORLDMATRIX, temp);
 
-	XMFLOAT4 tempVec = XMFLOAT4(0, 1.0f, -5, 1);
+	XMFLOAT4 tempVec = XMFLOAT4(0, 1.0f, -5.0f, 1);
 	XMVECTOR pos = XMLoadFloat4(&tempVec);
 
 	tempVec = XMFLOAT4(0, 0, 1, 1);
@@ -666,9 +666,9 @@ void DEMO_APP::SetLight()
 
 	lightChange += change;
 
-	lightToShader.dir = XMFLOAT3(0.25f, 1.0f, 0.0f);
+	lightToShader.dir = XMFLOAT3(0.0f, -1.0f, 1.0f);
 	lightToShader.ambient = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
 	lightToShader.diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	lightToShader.specular = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
-	lightToShader.specularPower = 32.0f;
+	lightToShader.specular = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	lightToShader.specularPower = 16.0f;
 }
