@@ -14,7 +14,7 @@ struct OUTPUT_VERTEX
 	float2 textureCoords : TEXTURE;
 	float3 normalOut : NORMAL;
 	float4 projectedCoordinate : SV_POSITION;
-	float3 ViewDir : VIEW;
+	float3 position : POSITION;
 };
 
 // TODO: PART 3 STEP 2a
@@ -23,8 +23,6 @@ cbuffer THIS_IS_VRAM : register( b0 )
 	float4x4 WORLDMATRIX;
 	float4x4 VIEWMATRIX;
 	float4x4 PROJECTIONMATRIX;
-	float3 CamPos;
-	float padding;
 };
 
 OUTPUT_VERTEX main( INPUT_VERTEX fromVertexBuffer )
@@ -32,10 +30,10 @@ OUTPUT_VERTEX main( INPUT_VERTEX fromVertexBuffer )
 	OUTPUT_VERTEX sendToRasterizer = (OUTPUT_VERTEX)0;
 	sendToRasterizer.projectedCoordinate.w = 1;
 
-	float4 vertex = fromVertexBuffer.coordinate;
+	float4 vertex = float4(fromVertexBuffer.coordinate.xyz,1);
 
 	vertex = mul(vertex, WORLDMATRIX);
-	sendToRasterizer.ViewDir = CamPos - vertex.xyz;
+	sendToRasterizer.position = vertex.xyz;
 	vertex = mul(vertex, VIEWMATRIX);
 	vertex = mul(vertex, PROJECTIONMATRIX);
 	
@@ -43,8 +41,7 @@ OUTPUT_VERTEX main( INPUT_VERTEX fromVertexBuffer )
 	sendToRasterizer.colorOut = fromVertexBuffer.color;
 	sendToRasterizer.textureCoords = fromVertexBuffer.uv;
 
-	sendToRasterizer.normalOut = mul(fromVertexBuffer.normal, (float3x3)WORLDMATRIX);
-	sendToRasterizer.ViewDir = normalize(sendToRasterizer.ViewDir);
+	sendToRasterizer.normalOut = mul(float4(fromVertexBuffer.normal.xyz, 0), WORLDMATRIX).xyz;
 
 	return sendToRasterizer;
 }

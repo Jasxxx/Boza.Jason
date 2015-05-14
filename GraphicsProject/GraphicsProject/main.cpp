@@ -89,8 +89,6 @@ class DEMO_APP
 		XMFLOAT4X4 WORLDMATRIX;
 		XMFLOAT4X4 VIEWMATRIX;
 		XMFLOAT4X4 PROJECTIONMATRIX;
-		XMFLOAT3 CameraPosition;
-		float padding;
 	};
 
 	struct Light
@@ -100,6 +98,8 @@ class DEMO_APP
 		XMFLOAT4 ambient;
 		XMFLOAT4 diffuse;
 		XMFLOAT4 specular;
+		XMFLOAT3 CameraPosition;
+		float padding;
 	};
 
 	SEND_TO_VRAM toShader;
@@ -367,7 +367,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "TEXTURE", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "NORMAL", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 
 	int elements = sizeof(vLayout) / sizeof(vLayout[0]);
@@ -479,7 +479,7 @@ bool DEMO_APP::Run()
 	temp = XMLoadFloat4x4(&VIEWMATRIX);
 	XMMatrixInverse(NULL, temp);
 	XMStoreFloat4x4(&newMatrix, temp);
-	toShader.VIEWMATRIX = newMatrix;
+	toShader.VIEWMATRIX = VIEWMATRIX;
 
 	toShader.PROJECTIONMATRIX = PROJECTIONMATRIX;
 
@@ -504,11 +504,9 @@ bool DEMO_APP::Run()
 	temp = XMLoadFloat4x4(&VIEWMATRIX);
 	XMMatrixInverse(NULL, temp);
 	XMStoreFloat4x4(&newMatrix, temp);
-	toShader.VIEWMATRIX = newMatrix;
+	toShader.VIEWMATRIX = VIEWMATRIX;
 
 	toShader.PROJECTIONMATRIX = PROJECTIONMATRIX;
-	toShader.CameraPosition = XMFLOAT3(VIEWMATRIX._41, VIEWMATRIX._42, VIEWMATRIX._43);
-	toShader.padding = 0.0f;
 
 	memcpy(data.pData, &toShader, sizeof(toShader));
 	pDeviceContext->Unmap(pConstantBuffer, 0);
@@ -666,9 +664,20 @@ void DEMO_APP::SetLight()
 
 	lightChange += change;
 
-	lightToShader.dir = XMFLOAT3(0.0f, -1.0f, 1.0f);
-	lightToShader.ambient = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+	lightToShader.dir = XMFLOAT3(0.0f, -1.0f, 0.0f);
+	lightToShader.ambient = XMFLOAT4(0.05f, 0.05f, 0.05f, 1.0f);
 	lightToShader.diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	lightToShader.specular = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	lightToShader.specularPower = 16.0f;
+	lightToShader.specularPower = 128.0f;
+
+	XMMATRIX tempMatrix = XMLoadFloat4x4(&VIEWMATRIX);
+	XMMATRIX tempMatrix2 = XMLoadFloat4x4(&PROJECTIONMATRIX);
+	tempMatrix = XMMatrixInverse(NULL, tempMatrix);
+	lightToShader.CameraPosition = XMFLOAT3(tempMatrix.r[3].m128_f32[0], tempMatrix.r[3].m128_f32[1], tempMatrix.r[3].m128_f32[2]);
+	tempMatrix = XMMatrixMultiply(tempMatrix, tempMatrix2);
+
+	XMFLOAT4X4 newView;
+	XMStoreFloat4x4(&newView, tempMatrix);
+
+	lightToShader.padding = 0.0f;
 }
