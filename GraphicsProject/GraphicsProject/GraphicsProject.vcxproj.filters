@@ -61,5 +61,7 @@
     <FxCompile Include="Trivial_PS.hlsl" />
     <FxCompile Include="Trivial_VS.hlsl" />
     <FxCompile Include="General_PS.hlsl" />
+    <FxCompile Include="Sky_PS.hlsl" />
+    <FxCompile Include="Sky_VS.hlsl" />
   </ItemGroup>
 </Project>

@@ -3,6 +3,7 @@
 
 // Reference http://www.rastertek.com/dx11tut10.html
 // Reference http://www.braynzarsoft.net/index.php?p=D3D11SIMPLELIGHT#still
+// Reference http://www.braynzarsoft.net/index.php?p=D3D11CUBEMAP
 
 //************************************************************
 //************ INCLUDES & DEFINES ****************************
@@ -20,6 +21,8 @@
 #include "General_PS.csh"
 #include "Trivial_VS.csh"
 #include "Trivial_PS.csh"
+#include "Sky_VS.csh"
+#include "Sky_PS.csh"
 #include "DDSTextureLoader.h"
 
 #pragma comment(lib, "d3d11.lib")
@@ -47,6 +50,9 @@ class DEMO_APP
 	XMFLOAT4X4 VIEWMATRIX;
 	XMFLOAT4X4 WORLDMATRIX;
 	XMFLOAT4X4 PROJECTIONMATRIX;
+	// Sky Matrix
+	XMMATRIX SKYMATRIX;
+	XMMATRIX Scale;
 
 	// Texture class for loading and unloading of textures
 	TextureManager TM;
@@ -56,17 +62,29 @@ class DEMO_APP
 	IDXGISwapChain* pSwapChain;
 	ID3D11Device* pDevice;
 	ID3D11DeviceContext* pDeviceContext;
-	ID3D11ShaderResourceView* SRV;
-	ID3D11SamplerState* pTextureSamplerState;
 	ID3D11RenderTargetView* pBackBuffer;
-	ID3D11VertexShader* pVertexShader;
-	ID3D11PixelShader* pPixelShader;
-	ID3D11PixelShader* pNonTexturedPixelShader;
 	ID3D11InputLayout* pInputLayout;
 	ID3D11Texture2D* pDepthStencil;
 	ID3D11DepthStencilView* pDSV;
-	ID3D11RasterizerState* pDefaultRasterState;
 	ID3D11BlendState* pBlendState;
+	ID3D11DepthStencilState* pDepthStateLessEqual;
+	// Shader Resource
+	ID3D11ShaderResourceView* SRV;
+	ID3D11ShaderResourceView* SkySRV;
+
+	// Raster States
+	ID3D11RasterizerState* pDefaultRasterState;
+	ID3D11RasterizerState* pNoCullRasterState;
+
+	// Sampler States
+	ID3D11SamplerState* pTextureSamplerState;
+	
+	// Shaders
+	ID3D11VertexShader* pVertexShader;
+	ID3D11PixelShader* pPixelShader;
+	ID3D11PixelShader* pNonTexturedPixelShader;
+	ID3D11VertexShader* pSkyVertexShader;
+	ID3D11PixelShader* pSkyPixelShader;
 
 	D3D11_VIEWPORT MAIN_VIEWPORT;
 
@@ -75,6 +93,9 @@ class DEMO_APP
 	ID3D11Buffer* pConstantLightBuffer;
 	ID3D11Buffer* pIndexBuffer;
 	map<string, ID3D11Buffer*> VertexBufferMap;
+	ID3D11Buffer* pSphereIndexBuffer;
+	ID3D11Buffer* pSphereVertBuffer;
+	int NumSphereFaces;
 
 	// Declaration of Time object for time related use
 	XTime Time;
@@ -114,6 +135,8 @@ public:
 	void Input();
 	void UpdateCamera();
 	void SetLight();
+	void CreateSphere(int LatLines, int LongLines);
+	void UpdateSky();
 };
 
 //************************************************************
@@ -218,6 +241,15 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 
 	pDevice->CreateDepthStencilView(pDepthStencil, &descDSV, &pDSV);
 
+	// Skybox Depth Stencil
+	D3D11_DEPTH_STENCIL_DESC DepthStateDesc;
+	ZeroMemory(&DepthStateDesc, sizeof(DepthStateDesc));
+	DepthStateDesc.DepthEnable = true;
+	DepthStateDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+	DepthStateDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+
+	pDevice->CreateDepthStencilState(&DepthStateDesc, &pDepthStateLessEqual);
+
 	// Viewport(s)
 	ZeroMemory(&MAIN_VIEWPORT, sizeof(D3D11_VIEWPORT));
 
@@ -234,6 +266,8 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 
 	FBX.LoadFXB(verts);
 	verts.shrink_to_fit();
+
+	CreateSphere(10, 10);
 
 	VERTEX Star[12];
 
@@ -355,6 +389,14 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 		sizeof(Trivial_PS),
 		NULL,
 		&pPixelShader);
+	pDevice->CreateVertexShader(Sky_VS,
+		sizeof(Sky_VS),
+		NULL,
+		&pSkyVertexShader);
+	pDevice->CreatePixelShader(Sky_PS,
+		sizeof(Sky_PS),
+		NULL,
+		&pSkyPixelShader);
 	pDevice->CreatePixelShader(General_PS,
 		sizeof(General_PS),
 		NULL,
@@ -412,10 +454,21 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	DefaultRasterDesc.FillMode = D3D11_FILL_SOLID;
 	pDevice->CreateRasterizerState(&DefaultRasterDesc, &pDefaultRasterState);
 
+	D3D11_RASTERIZER_DESC NoCullRasterDesc;
+	ZeroMemory(&NoCullRasterDesc, sizeof(NoCullRasterDesc));
+	NoCullRasterDesc.AntialiasedLineEnable = FALSE;
+	NoCullRasterDesc.CullMode = D3D11_CULL_NONE;
+	NoCullRasterDesc.FillMode = D3D11_FILL_SOLID;
+	pDevice->CreateRasterizerState(&NoCullRasterDesc, &pNoCullRasterState);
+
 #pragma endregion
 
 #pragma region Textures
 	CreateDDSTextureFromFile(pDevice, L"txt_001_diff.dds", NULL, &SRV);
+	CreateDDSTextureFromFile(pDevice, L"SkyBox.dds", NULL, &SkySRV);
+
+	// D3D11_RESOURCE_MISC_TEXTURECUBE;
+
 
 	D3D11_SAMPLER_DESC sData;
 	ZeroMemory(&sData, sizeof(sData));
@@ -443,6 +496,7 @@ bool DEMO_APP::Run()
 	Time.Signal();
 	SetLight();
 	Input();
+	UpdateSky();
 
 	pDeviceContext->OMSetRenderTargets(1, &pBackBuffer, pDSV);
 	pDeviceContext->RSSetViewports(1, &MAIN_VIEWPORT);
@@ -514,6 +568,34 @@ bool DEMO_APP::Run()
 	pDeviceContext->PSSetShader(pNonTexturedPixelShader, NULL, 0);
 	pDeviceContext->IASetVertexBuffers(0, 1, &VertexBufferMap["star"], &stride, &offset);
 	pDeviceContext->DrawIndexed(60, 0, 0);
+
+	pDeviceContext->Map(pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
+	//rotation += 1.0f *(float)Time.Delta();
+
+	temp = SKYMATRIX;
+	XMStoreFloat4x4(&newMatrix, temp);
+	toShader.WORLDMATRIX = newMatrix;
+
+	temp = XMLoadFloat4x4(&VIEWMATRIX);
+	XMMatrixInverse(NULL, temp);
+	XMStoreFloat4x4(&newMatrix, temp);
+	toShader.VIEWMATRIX = VIEWMATRIX;
+
+	toShader.PROJECTIONMATRIX = PROJECTIONMATRIX;
+
+	memcpy(data.pData, &toShader, sizeof(toShader));
+	pDeviceContext->Unmap(pConstantBuffer, 0);
+
+	pDeviceContext->IASetIndexBuffer(pSphereIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+	pDeviceContext->IASetVertexBuffers(0, 1, &pSphereVertBuffer, &stride, &offset);
+	pDeviceContext->RSSetState(pNoCullRasterState);
+	pDeviceContext->OMSetDepthStencilState(pDepthStateLessEqual,0);
+	pDeviceContext->PSSetShaderResources(0, 1, &SkySRV);
+	pDeviceContext->PSSetShader(pSkyPixelShader, NULL, 0);
+	pDeviceContext->VSSetShader(pSkyVertexShader, NULL, 0);
+	pDeviceContext->DrawIndexed(NumSphereFaces * 3, 0, 0);
+
+	pDeviceContext->OMSetDepthStencilState(NULL, 0);
 
 	pSwapChain->Present(0, 0);
 	return true;
@@ -668,7 +750,7 @@ void DEMO_APP::SetLight()
 	lightToShader.ambient = XMFLOAT4(0.05f, 0.05f, 0.05f, 1.0f);
 	lightToShader.diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	lightToShader.specular = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	lightToShader.specularPower = 128.0f;
+	lightToShader.specularPower = 64.0f;
 
 	XMMATRIX tempMatrix = XMLoadFloat4x4(&VIEWMATRIX);
 	XMMATRIX tempMatrix2 = XMLoadFloat4x4(&PROJECTIONMATRIX);
@@ -680,4 +762,141 @@ void DEMO_APP::SetLight()
 	XMStoreFloat4x4(&newView, tempMatrix);
 
 	lightToShader.padding = 0.0f;
+}
+
+void DEMO_APP::CreateSphere(int LatLines, int LongLines)
+{
+	int NumSphereVertices = ((LatLines - 2) * LongLines) + 2;
+	NumSphereFaces = ((LatLines - 3)*(LongLines)* 2) + (LongLines * 2);
+
+	float sphereYaw = 0.0f;
+	float spherePitch = 0.0f;
+
+	std::vector<VERTEX> vertices(NumSphereVertices);
+
+	XMVECTOR currVertPos = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+
+	vertices[0].Position.x = 0.0f;
+	vertices[0].Position.y = 0.0f;
+	vertices[0].Position.z = 1.0f;
+
+	for (int i = 0; i < LatLines - 2; ++i)
+	{
+		spherePitch = (float)((i + 1) * (3.14f / (LatLines - 1)));
+		XMMATRIX Rotationx = XMMatrixRotationX(spherePitch);
+		for (int j = 0; j < LongLines; ++j)
+		{
+			sphereYaw = float(j * (6.28f / (LongLines)));
+			XMMATRIX Rotationy = XMMatrixRotationZ(sphereYaw);
+			currVertPos = XMVector3TransformNormal(XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), (Rotationx * Rotationy));
+			currVertPos = XMVector3Normalize(currVertPos);
+			vertices[i*LongLines + j + 1].Position.x = XMVectorGetX(currVertPos);
+			vertices[i*LongLines + j + 1].Position.y = XMVectorGetY(currVertPos);
+			vertices[i*LongLines + j + 1].Position.z = XMVectorGetZ(currVertPos);
+		}
+	}
+
+	vertices[NumSphereVertices - 1].Position.x = 0.0f;
+	vertices[NumSphereVertices - 1].Position.y = 0.0f;
+	vertices[NumSphereVertices - 1].Position.z = -1.0f;
+
+
+	D3D11_BUFFER_DESC vertexBufferDesc;
+	ZeroMemory(&vertexBufferDesc, sizeof(vertexBufferDesc));
+
+	vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	vertexBufferDesc.ByteWidth = sizeof(VERTEX) * NumSphereVertices;
+	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vertexBufferDesc.CPUAccessFlags = 0;
+	vertexBufferDesc.MiscFlags = 0;
+
+	D3D11_SUBRESOURCE_DATA vertexBufferData;
+
+	ZeroMemory(&vertexBufferData, sizeof(vertexBufferData));
+	vertexBufferData.pSysMem = &vertices[0];
+	pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &pSphereVertBuffer);
+
+
+	std::vector<unsigned int> indices(NumSphereFaces * 3);
+
+	int k = 0;
+	for (int l = 0; l < LongLines - 1; ++l)
+	{
+		indices[k] = 0;
+		indices[k + 1] = l + 1;
+		indices[k + 2] = l + 2;
+		k += 3;
+	}
+
+	indices[k] = 0;
+	indices[k + 1] = LongLines;
+	indices[k + 2] = 1;
+	k += 3;
+
+	for (int i = 0; i < LatLines - 3; ++i)
+	{
+		for (int j = 0; j < LongLines - 1; ++j)
+		{
+			indices[k] = i*LongLines + j + 1;
+			indices[k + 1] = i*LongLines + j + 2;
+			indices[k + 2] = (i + 1)*LongLines + j + 1;
+
+			indices[k + 3] = (i + 1)*LongLines + j + 1;
+			indices[k + 4] = i*LongLines + j + 2;
+			indices[k + 5] = (i + 1)*LongLines + j + 2;
+
+			k += 6; // next quad
+		}
+
+		indices[k] = (i*LongLines) + LongLines;
+		indices[k + 1] = (i*LongLines) + 1;
+		indices[k + 2] = ((i + 1)*LongLines) + LongLines;
+
+		indices[k + 3] = ((i + 1)*LongLines) + LongLines;
+		indices[k + 4] = (i*LongLines) + 1;
+		indices[k + 5] = ((i + 1)*LongLines) + 1;
+
+		k += 6;
+	}
+
+	for (int l = 0; l < LongLines - 1; ++l)
+	{
+		indices[k] = NumSphereVertices - 1;
+		indices[k + 1] = (NumSphereVertices - 1) - (l + 1);
+		indices[k + 2] = (NumSphereVertices - 1) - (l + 2);
+		k += 3;
+	}
+
+	indices[k] = NumSphereVertices - 1;
+	indices[k + 1] = (NumSphereVertices - 1) - LongLines;
+	indices[k + 2] = NumSphereVertices - 2;
+
+	D3D11_BUFFER_DESC indexBufferDesc;
+	ZeroMemory(&indexBufferDesc, sizeof(indexBufferDesc));
+
+	indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	indexBufferDesc.ByteWidth = sizeof(unsigned int) * NumSphereFaces * 3;
+	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	indexBufferDesc.CPUAccessFlags = 0;
+	indexBufferDesc.MiscFlags = 0;
+
+	D3D11_SUBRESOURCE_DATA iinitData;
+
+	iinitData.pSysMem = &indices[0];
+	pDevice->CreateBuffer(&indexBufferDesc, &iinitData, &pSphereIndexBuffer);
+}
+
+void DEMO_APP::UpdateSky()
+{
+	SKYMATRIX = XMMatrixIdentity();
+	Scale = XMMatrixScaling(5.0f, 5.0f, 5.0f);
+	XMMATRIX tempMatrix = XMLoadFloat4x4(&VIEWMATRIX);
+
+	tempMatrix = XMMatrixInverse(NULL, tempMatrix);
+	XMFLOAT3 camPos = XMFLOAT3(tempMatrix.r[3].m128_f32[0], tempMatrix.r[3].m128_f32[1], tempMatrix.r[3].m128_f32[2]);
+	XMVECTOR cameraPosition = XMLoadFloat3(&camPos);
+
+	XMMATRIX translation = XMMatrixTranslation(XMVectorGetX(cameraPosition), XMVectorGetY(cameraPosition), XMVectorGetZ(cameraPosition));
+	XMMATRIX rotation = XMMatrixRotationX(-1.5f);
+	SKYMATRIX = rotation * Scale * translation;
 }
