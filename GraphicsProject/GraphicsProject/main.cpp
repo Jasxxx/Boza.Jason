@@ -78,7 +78,7 @@ class DEMO_APP
 
 	// Sampler States
 	ID3D11SamplerState* pTextureSamplerState;
-	
+
 	// Shaders
 	ID3D11VertexShader* pVertexShader;
 	ID3D11PixelShader* pPixelShader;
@@ -95,7 +95,12 @@ class DEMO_APP
 	map<string, ID3D11Buffer*> VertexBufferMap;
 	ID3D11Buffer* pSphereIndexBuffer;
 	ID3D11Buffer* pSphereVertBuffer;
+	ID3D11Buffer* pConstantInstanceBuffer;
 	int NumSphereFaces;
+
+	// instance data variables
+	int OceanCount = 9;
+	int instanceMul = 1;
 
 	// Declaration of Time object for time related use
 	XTime Time;
@@ -112,6 +117,11 @@ class DEMO_APP
 		XMFLOAT4X4 PROJECTIONMATRIX;
 	};
 
+	struct InstancedData
+	{
+		XMFLOAT3 position;
+	};
+
 	struct Light
 	{
 		XMFLOAT3 dir;
@@ -121,6 +131,10 @@ class DEMO_APP
 		XMFLOAT4 specular;
 		XMFLOAT3 CameraPosition;
 		float padding;
+		XMFLOAT3 position;
+		float range;
+		XMFLOAT3 attenuation;
+		float pad2;
 	};
 
 	SEND_TO_VRAM toShader;
@@ -378,6 +392,91 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	ZeroMemory(&cLightData, sizeof(cLightData));
 	cLightData.pSysMem = &lightToShader;
 	pDevice->CreateBuffer(&cLightBuffer, &cLightData, &pConstantLightBuffer);
+
+	// instance buffer
+	//OceanCount = (OceanCount - 1);
+	vector<InstancedData> instVec(OceanCount);
+	XMVECTOR tempPos;
+	tempPos = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
+	XMStoreFloat3(&instVec[0].position, tempPos);
+	
+	
+	instanceMul = 1;
+	int placeCounter = 0;
+	int testVar = 8;
+	for (int i = 1; i < OceanCount; i++)
+	{
+		int temp = i - 1;
+		temp = temp % 8;
+		float tempValue = 4.0f * instanceMul;
+		switch (temp)
+		{
+		case 0:
+		{
+			tempPos = XMVectorSet(-tempValue, 0.0f, -tempValue, 0.0f);
+			break;
+		}
+		case 1:
+		{
+			tempPos = XMVectorSet(0.0f, 0.0f, -tempValue, 0.0f);
+			break;
+		}
+		case 2:
+		{
+			tempPos = XMVectorSet(tempValue, 0.0f, -tempValue, 0.0f);
+			break;
+		}
+		case 3:
+		{
+			tempPos = XMVectorSet(-tempValue, 0.0f, 0.0f, 0.0f);
+			break;
+		}
+		case 4:
+		{
+			tempPos = XMVectorSet(tempValue, 0.0f, 0.0f, 0.0f);
+			break;
+		}
+		case 5:
+		{
+			tempPos = XMVectorSet(-tempValue, 0.0f, tempValue, 0.0f);
+			break;
+		}
+		case 6:
+		{
+			tempPos = XMVectorSet(0.0f, 0.0f, tempValue, 0.0f);
+			break;
+		}
+		case 7:
+		{
+			tempPos = XMVectorSet(tempValue, 0.0f, tempValue, 0.0f);
+			break;
+		}
+		default:
+			break;
+		}
+
+		XMStoreFloat3(&instVec[i].position, tempPos);
+
+		placeCounter++;
+		if (placeCounter == 8 * instanceMul)
+		{
+			instanceMul++;
+			placeCounter = 0;
+		}
+	}
+
+	D3D11_BUFFER_DESC instanceBufferDesc;
+	ZeroMemory(&instanceBufferDesc, sizeof(instanceBufferDesc));
+	instanceBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	instanceBufferDesc.ByteWidth = sizeof(instVec) * OceanCount;
+	instanceBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	instanceBufferDesc.CPUAccessFlags = 0;
+	instanceBufferDesc.MiscFlags = 0;
+
+	D3D11_SUBRESOURCE_DATA instanceData;
+	ZeroMemory(&instanceData, sizeof(instanceData));
+	instanceData.pSysMem = &instVec[0];
+	pDevice->CreateBuffer(&instanceBufferDesc, &instanceData, &pConstantInstanceBuffer);
 #pragma endregion
 
 #pragma region Shaders
@@ -409,7 +508,8 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "TEXTURE", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "INSTANCEPOS", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1 }
 	};
 
 	int elements = sizeof(vLayout) / sizeof(vLayout[0]);
@@ -505,9 +605,13 @@ bool DEMO_APP::Run()
 	pDeviceContext->ClearRenderTargetView(pBackBuffer, darkBlue);
 	pDeviceContext->ClearDepthStencilView(pDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
+	ID3D11Buffer* vertInstBuffers[2] = { VertexBufferMap["ocean"], pConstantInstanceBuffer };
+	unsigned int strideArr[2] = { sizeof(VERTEX), sizeof(InstancedData) };
+	unsigned int offsetArr[2] = { 0, 0 };
+
 	unsigned int stride = sizeof(VERTEX);
 	unsigned int offset = 0;
-	pDeviceContext->IASetVertexBuffers(0, 1, &VertexBufferMap["ocean"], &stride, &offset);
+	pDeviceContext->IASetVertexBuffers(0, 2, vertInstBuffers, strideArr, offsetArr);
 	pDeviceContext->IASetInputLayout(pInputLayout);
 	pDeviceContext->VSSetShader(pVertexShader, NULL, 0);
 	pDeviceContext->PSSetShader(pPixelShader, NULL, 0);
@@ -546,7 +650,7 @@ bool DEMO_APP::Run()
 	pDeviceContext->Unmap(pConstantLightBuffer, 0);
 #pragma endregion
 
-	pDeviceContext->Draw(verts.size(), 0);
+	pDeviceContext->DrawInstanced(verts.size(), OceanCount, 0, 0);
 
 	pDeviceContext->Map(pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
 	//rotation += 1.0f *(float)Time.Delta();
@@ -589,7 +693,7 @@ bool DEMO_APP::Run()
 	pDeviceContext->IASetIndexBuffer(pSphereIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 	pDeviceContext->IASetVertexBuffers(0, 1, &pSphereVertBuffer, &stride, &offset);
 	pDeviceContext->RSSetState(pNoCullRasterState);
-	pDeviceContext->OMSetDepthStencilState(pDepthStateLessEqual,0);
+	pDeviceContext->OMSetDepthStencilState(pDepthStateLessEqual, 0);
 	pDeviceContext->PSSetShaderResources(0, 1, &SkySRV);
 	pDeviceContext->PSSetShader(pSkyPixelShader, NULL, 0);
 	pDeviceContext->VSSetShader(pSkyVertexShader, NULL, 0);
@@ -626,6 +730,14 @@ bool DEMO_APP::ShutDown()
 	pConstantLightBuffer->Release();
 	VertexBufferMap["ocean"]->Release();
 	VertexBufferMap["star"]->Release();
+	pSphereIndexBuffer->Release();
+	pSphereVertBuffer->Release();
+	pConstantInstanceBuffer->Release();
+	pSkyVertexShader->Release();
+	pSkyPixelShader->Release();
+	SkySRV->Release();
+	pNoCullRasterState->Release();
+	pDepthStateLessEqual->Release();
 
 	UnregisterClass(L"DirectXApplication", application);
 	return true;
@@ -732,11 +844,11 @@ void DEMO_APP::UpdateCamera()
 
 void DEMO_APP::SetLight()
 {
-	
+
 	if (lightChange >= 1.0f)
 	{
 		lightChange = 1.0f;
-		change = - 0.001f;
+		change = -0.001f;
 	}
 	if (lightChange <= 0.0f)
 	{
@@ -746,7 +858,7 @@ void DEMO_APP::SetLight()
 
 	lightChange += change;
 
-	lightToShader.dir = XMFLOAT3(0.0f, -1.0f, 0.0f);
+	lightToShader.dir = XMFLOAT3(0.5f, -1.0f, -0.5f);
 	lightToShader.ambient = XMFLOAT4(0.05f, 0.05f, 0.05f, 1.0f);
 	lightToShader.diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	lightToShader.specular = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -898,5 +1010,5 @@ void DEMO_APP::UpdateSky()
 
 	XMMATRIX translation = XMMatrixTranslation(XMVectorGetX(cameraPosition), XMVectorGetY(cameraPosition), XMVectorGetZ(cameraPosition));
 	XMMATRIX rotation = XMMatrixRotationX(-1.5f);
-	SKYMATRIX = rotation * Scale * translation;
+	SKYMATRIX = Scale * translation;
 }

@@ -21,6 +21,10 @@ cbuffer Light : register (b0)
 	float4 specular;
 	float3 CamPos;
 	float padding;
+	float3 LightPos;
+	float range;
+	float3 att;
+	float pad2;
 }
 
 float4 main(OUTPUT_VERTEX input) : SV_TARGET
