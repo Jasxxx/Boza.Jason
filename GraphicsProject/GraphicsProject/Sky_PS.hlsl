@@ -1,5 +1,3 @@
-// Specular Light Reference http://www.rastertek.com/dx11tut10.html
-
 TextureCube baseTexture : register (t0);
 SamplerState filter : register(s0);
 
