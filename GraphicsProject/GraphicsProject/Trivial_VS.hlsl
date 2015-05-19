@@ -32,6 +32,7 @@ OUTPUT_VERTEX main( INPUT_VERTEX fromVertexBuffer )
 	sendToRasterizer.projectedCoordinate.w = 1;
 
 	float4 vertex = float4(fromVertexBuffer.coordinate.xyz, 1);
+
 	vertex += float4(fromVertexBuffer.instancePos, 0.0f);
 	vertex = mul(vertex, WORLDMATRIX);
 	sendToRasterizer.position = vertex.xyz;

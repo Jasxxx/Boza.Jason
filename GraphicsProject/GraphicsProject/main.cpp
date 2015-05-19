@@ -4,6 +4,7 @@
 // Reference http://www.rastertek.com/dx11tut10.html
 // Reference http://www.braynzarsoft.net/index.php?p=D3D11SIMPLELIGHT#still
 // Reference http://www.braynzarsoft.net/index.php?p=D3D11CUBEMAP
+// Reference http://en.wikipedia.org/wiki/Sine_wave
 
 //************************************************************
 //************ INCLUDES & DEFINES ****************************
@@ -68,6 +69,7 @@ class DEMO_APP
 	ID3D11DepthStencilView* pDSV;
 	ID3D11BlendState* pBlendState;
 	ID3D11DepthStencilState* pDepthStateLessEqual;
+
 	// Shader Resource
 	ID3D11ShaderResourceView* SRV;
 	ID3D11ShaderResourceView* SkySRV;
@@ -97,9 +99,10 @@ class DEMO_APP
 	ID3D11Buffer* pSphereVertBuffer;
 	ID3D11Buffer* pConstantInstanceBuffer;
 	int NumSphereFaces;
+	ID3D11Buffer* pTesselationBuffer;
 
 	// instance data variables
-	int OceanCount = 9;
+	int OceanCount = 1;
 	int instanceMul = 1;
 
 	// Declaration of Time object for time related use
@@ -109,6 +112,11 @@ class DEMO_APP
 	XMMATRIX Transform;
 	float RotateX = 0.0f;
 	float RotateY = 0.0f;
+
+	// Wave Variables
+	float fPeak = 0.0f;
+	float fAverage = 0.0f;
+	vector<float> OscillationVec;
 
 	struct SEND_TO_VRAM
 	{
@@ -151,6 +159,8 @@ public:
 	void SetLight();
 	void CreateSphere(int LatLines, int LongLines);
 	void UpdateSky();
+	void InitializeWave();
+	void WaveMotion(ID3D11Buffer** buffer);
 };
 
 //************************************************************
@@ -344,9 +354,9 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 
 	D3D11_BUFFER_DESC vBuffer;
 	ZeroMemory(&vBuffer, sizeof(vBuffer));
-	vBuffer.Usage = D3D11_USAGE_IMMUTABLE;
+	vBuffer.Usage = D3D11_USAGE_DYNAMIC;
 	vBuffer.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-	vBuffer.CPUAccessFlags = NULL;
+	vBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 	vBuffer.ByteWidth = sizeof(VERTEX) * verts.size();
 
 	pDevice->CreateBuffer(&vBuffer, &data, &VertexBufferMap["ocean"]);
@@ -477,6 +487,23 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	ZeroMemory(&instanceData, sizeof(instanceData));
 	instanceData.pSysMem = &instVec[0];
 	pDevice->CreateBuffer(&instanceBufferDesc, &instanceData, &pConstantInstanceBuffer);
+
+#pragma region Tesselation Buffer
+
+	//D3D11_BUFFER_DESC TessBufferData;
+	//ZeroMemory(&TessBufferData, sizeof(TessBufferData));
+	//TessBufferData.ByteWidth = sizeof(SEND_TO_VRAM);
+	//TessBufferData.Usage = D3D11_USAGE_DYNAMIC;
+	//TessBufferData.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	//TessBufferData.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	//D3D11_SUBRESOURCE_DATA TessData;
+	//ZeroMemory(&TessData, sizeof(TessData));
+	//TessData.pSysMem = &toShader;
+	//pDevice->CreateBuffer(&TessBufferData, &TessData, &pTesselationBuffer);
+
+#pragma endregion
+
 #pragma endregion
 
 #pragma region Shaders
@@ -585,6 +612,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 #pragma endregion
 
 	Time.Restart();
+	InitializeWave();
 }
 
 //************************************************************
@@ -605,9 +633,11 @@ bool DEMO_APP::Run()
 	pDeviceContext->ClearRenderTargetView(pBackBuffer, darkBlue);
 	pDeviceContext->ClearDepthStencilView(pDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
+
 	ID3D11Buffer* vertInstBuffers[2] = { VertexBufferMap["ocean"], pConstantInstanceBuffer };
 	unsigned int strideArr[2] = { sizeof(VERTEX), sizeof(InstancedData) };
 	unsigned int offsetArr[2] = { 0, 0 };
+	WaveMotion(&vertInstBuffers[0]);
 
 	unsigned int stride = sizeof(VERTEX);
 	unsigned int offset = 0;
@@ -649,6 +679,7 @@ bool DEMO_APP::Run()
 	memcpy(data.pData, &lightToShader, sizeof(lightToShader));
 	pDeviceContext->Unmap(pConstantLightBuffer, 0);
 #pragma endregion
+
 
 	pDeviceContext->DrawInstanced(verts.size(), OceanCount, 0, 0);
 
@@ -1011,4 +1042,52 @@ void DEMO_APP::UpdateSky()
 	XMMATRIX translation = XMMatrixTranslation(XMVectorGetX(cameraPosition), XMVectorGetY(cameraPosition), XMVectorGetZ(cameraPosition));
 	XMMATRIX rotation = XMMatrixRotationX(-1.5f);
 	SKYMATRIX = Scale * translation;
+}
+
+void DEMO_APP::InitializeWave()
+{
+	for (unsigned int i = 0; i < verts.size(); i++)
+	{
+		OscillationVec.push_back(verts[i].Position.y);
+	}
+
+	for (unsigned int i = 0; i < OscillationVec.size(); i++)
+	{
+		fAverage += OscillationVec[i];
+	}
+
+	fAverage /= OscillationVec.size();
+
+	for (unsigned int i = 0; i < verts.size(); i++)
+	{
+		if (OscillationVec[i] >= fAverage)
+		{
+			OscillationVec[i] = 0.00005f;
+		}
+		else
+		{
+			OscillationVec[i] = -0.00005f;
+		}
+	}
+}
+
+void DEMO_APP::WaveMotion(ID3D11Buffer** buffer)
+{
+	for (unsigned int i = 0; i < verts.size(); i++)
+	{
+		verts[i].Position.y += OscillationVec[i] ;
+		if (verts[i].Position.y >= fAverage + 0.01f || verts[i].Position.y <= fAverage - 0.01f)
+		{
+			OscillationVec[i] = -OscillationVec[i];
+		}
+	}
+
+
+	D3D11_MAPPED_SUBRESOURCE WaveData;
+	ZeroMemory(&WaveData, sizeof(WaveData));
+
+	pDeviceContext->Map(*buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &WaveData);
+
+	memcpy(WaveData.pData, &(verts[0]), sizeof(VERTEX) * verts.size());
+	pDeviceContext->Unmap(*buffer, 0);
 }

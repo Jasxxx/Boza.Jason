@@ -63,5 +63,7 @@
     <FxCompile Include="General_PS.hlsl" />
     <FxCompile Include="Sky_PS.hlsl" />
     <FxCompile Include="Sky_VS.hlsl" />
+    <FxCompile Include="HullShader.hlsl" />
+    <FxCompile Include="DomainShader.hlsl" />
   </ItemGroup>
 </Project>
