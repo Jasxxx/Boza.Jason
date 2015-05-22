@@ -65,5 +65,6 @@
     <FxCompile Include="Sky_VS.hlsl" />
     <FxCompile Include="HullShader.hlsl" />
     <FxCompile Include="DomainShader.hlsl" />
+    <FxCompile Include="ComputeShader.hlsl" />
   </ItemGroup>
 </Project>

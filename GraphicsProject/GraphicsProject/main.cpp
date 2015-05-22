@@ -73,6 +73,7 @@ class DEMO_APP
 	// Shader Resource
 	ID3D11ShaderResourceView* SRV;
 	ID3D11ShaderResourceView* SkySRV;
+	ID3D11UnorderedAccessView* pWaveView;
 
 	// Raster States
 	ID3D11RasterizerState* pDefaultRasterState;
@@ -100,6 +101,7 @@ class DEMO_APP
 	ID3D11Buffer* pConstantInstanceBuffer;
 	int NumSphereFaces;
 	ID3D11Buffer* pTesselationBuffer;
+	ID3D11Buffer* pWaveBuffer;
 
 	// instance data variables
 	int OceanCount = 1;
@@ -114,9 +116,10 @@ class DEMO_APP
 	float RotateY = 0.0f;
 
 	// Wave Variables
-	float fPeak = 0.0f;
+	/*float fPeak = 0.0f;
 	float fAverage = 0.0f;
-	vector<float> OscillationVec;
+	vector<float> OscillationVec;*/
+	float Average;
 
 	struct SEND_TO_VRAM
 	{
@@ -145,6 +148,11 @@ class DEMO_APP
 		float pad2;
 	};
 
+	struct  Wave
+	{
+		float Oscillation;
+	};
+
 	SEND_TO_VRAM toShader;
 	Light lightToShader;
 public:
@@ -159,8 +167,8 @@ public:
 	void SetLight();
 	void CreateSphere(int LatLines, int LongLines);
 	void UpdateSky();
-	void InitializeWave();
-	void WaveMotion(ID3D11Buffer** buffer);
+	void InitializeWave(vector<Wave>& wave);
+	//void WaveMotion(ID3D11Buffer** buffer);
 };
 
 //************************************************************
@@ -409,8 +417,8 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	XMVECTOR tempPos;
 	tempPos = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
 	XMStoreFloat3(&instVec[0].position, tempPos);
-	
-	
+
+
 	instanceMul = 1;
 	int placeCounter = 0;
 	int testVar = 8;
@@ -501,6 +509,27 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	//ZeroMemory(&TessData, sizeof(TessData));
 	//TessData.pSysMem = &toShader;
 	//pDevice->CreateBuffer(&TessBufferData, &TessData, &pTesselationBuffer);
+
+#pragma endregion
+
+#pragma region Compute Buffer
+
+	vector<Wave> toCompute;
+	InitializeWave(toCompute);
+	
+	D3D11_BUFFER_DESC ComputeDesc;
+	ZeroMemory(&ComputeDesc, sizeof(ComputeDesc));
+	ComputeDesc.Usage = D3D11_USAGE_DEFAULT;
+	ComputeDesc.ByteWidth = sizeof(Wave) * toCompute.size();
+	ComputeDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+
+	D3D11_SUBRESOURCE_DATA ComputeData;
+	ZeroMemory(&ComputeData, sizeof(ComputeData));
+	ComputeData.pSysMem = &toCompute[0];
+
+	pDevice->CreateBuffer(&ComputeDesc, &ComputeData, &pWaveBuffer);
+
+	//pDevice->CreateUnorderedAccessView(&pWaveBuffer,)
 
 #pragma endregion
 
@@ -612,7 +641,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 #pragma endregion
 
 	Time.Restart();
-	InitializeWave();
+	//InitializeWave();
 }
 
 //************************************************************
@@ -637,7 +666,7 @@ bool DEMO_APP::Run()
 	ID3D11Buffer* vertInstBuffers[2] = { VertexBufferMap["ocean"], pConstantInstanceBuffer };
 	unsigned int strideArr[2] = { sizeof(VERTEX), sizeof(InstancedData) };
 	unsigned int offsetArr[2] = { 0, 0 };
-	WaveMotion(&vertInstBuffers[0]);
+	//WaveMotion(&vertInstBuffers[0]);
 
 	unsigned int stride = sizeof(VERTEX);
 	unsigned int offset = 0;
@@ -1044,50 +1073,53 @@ void DEMO_APP::UpdateSky()
 	SKYMATRIX = Scale * translation;
 }
 
-void DEMO_APP::InitializeWave()
+void DEMO_APP::InitializeWave(vector<Wave>& wave)
 {
-	for (unsigned int i = 0; i < verts.size(); i++)
-	{
-		OscillationVec.push_back(verts[i].Position.y);
-	}
-
-	for (unsigned int i = 0; i < OscillationVec.size(); i++)
-	{
-		fAverage += OscillationVec[i];
-	}
-
-	fAverage /= OscillationVec.size();
+	Average = 0.0f;
+	wave.resize(verts.size());
 
 	for (unsigned int i = 0; i < verts.size(); i++)
 	{
-		if (OscillationVec[i] >= fAverage)
+		wave[i].Oscillation = verts[i].Position.y;
+	}
+
+	for (unsigned int i = 0; i < wave.size(); i++)
+	{
+		Average += wave[i].Oscillation;
+	}
+
+	Average /= wave.size();
+
+	for (unsigned int i = 0; i < verts.size(); i++)
+	{
+		if (wave[i].Oscillation >= Average)
 		{
-			OscillationVec[i] = 0.00005f;
+			wave[i].Oscillation = 0.00005f;
 		}
 		else
 		{
-			OscillationVec[i] = -0.00005f;
+			wave[i].Oscillation = -0.00005f;
 		}
 	}
 }
-
-void DEMO_APP::WaveMotion(ID3D11Buffer** buffer)
-{
-	for (unsigned int i = 0; i < verts.size(); i++)
-	{
-		verts[i].Position.y += OscillationVec[i] ;
-		if (verts[i].Position.y >= fAverage + 0.01f || verts[i].Position.y <= fAverage - 0.01f)
-		{
-			OscillationVec[i] = -OscillationVec[i];
-		}
-	}
-
-
-	D3D11_MAPPED_SUBRESOURCE WaveData;
-	ZeroMemory(&WaveData, sizeof(WaveData));
-
-	pDeviceContext->Map(*buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &WaveData);
-
-	memcpy(WaveData.pData, &(verts[0]), sizeof(VERTEX) * verts.size());
-	pDeviceContext->Unmap(*buffer, 0);
-}
+//
+//void DEMO_APP::WaveMotion(ID3D11Buffer** buffer)
+//{
+//	for (unsigned int i = 0; i < verts.size(); i++)
+//	{
+//		verts[i].Position.y += OscillationVec[i];
+//		if (verts[i].Position.y >= fAverage + 0.01f || verts[i].Position.y <= fAverage - 0.01f)
+//		{
+//			OscillationVec[i] = -OscillationVec[i];
+//		}
+//	}
+//
+//
+//	D3D11_MAPPED_SUBRESOURCE WaveData;
+//	ZeroMemory(&WaveData, sizeof(WaveData));
+//
+//	pDeviceContext->Map(*buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &WaveData);
+//
+//	memcpy(WaveData.pData, &(verts[0]), sizeof(VERTEX) * verts.size());
+//	pDeviceContext->Unmap(*buffer, 0);
+//}
