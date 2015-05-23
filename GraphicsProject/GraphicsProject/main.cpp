@@ -18,12 +18,12 @@
 #include <string>
 #include <DirectXMath.h>
 #include "FBXLoader.h"
-#include "General_VS.csh"
 #include "General_PS.csh"
 #include "Trivial_VS.csh"
 #include "Trivial_PS.csh"
 #include "Sky_VS.csh"
 #include "Sky_PS.csh"
+#include "ComputeShader.csh"
 #include "DDSTextureLoader.h"
 
 #pragma comment(lib, "d3d11.lib")
@@ -73,6 +73,7 @@ class DEMO_APP
 	// Shader Resource
 	ID3D11ShaderResourceView* SRV;
 	ID3D11ShaderResourceView* SkySRV;
+	ID3D11ShaderResourceView* pWaveSRV;
 	ID3D11UnorderedAccessView* pWaveView;
 
 	// Raster States
@@ -88,6 +89,7 @@ class DEMO_APP
 	ID3D11PixelShader* pNonTexturedPixelShader;
 	ID3D11VertexShader* pSkyVertexShader;
 	ID3D11PixelShader* pSkyPixelShader;
+	ID3D11ComputeShader* pComputeShader;
 
 	D3D11_VIEWPORT MAIN_VIEWPORT;
 
@@ -102,6 +104,7 @@ class DEMO_APP
 	int NumSphereFaces;
 	ID3D11Buffer* pTesselationBuffer;
 	ID3D11Buffer* pWaveBuffer;
+	ID3D11Buffer* pWaveCB;
 
 	// instance data variables
 	int OceanCount = 1;
@@ -151,10 +154,20 @@ class DEMO_APP
 	struct  Wave
 	{
 		float Oscillation;
+		float CurrentY;
+	};
+	
+	struct WaveAverage
+	{
+		float average;
+		float time;
 	};
 
 	SEND_TO_VRAM toShader;
 	Light lightToShader;
+	WaveAverage toComputeAverage;
+
+	int dispatch;
 public:
 	DEMO_APP(HINSTANCE hinst, WNDPROC proc);
 	bool Run();
@@ -167,7 +180,7 @@ public:
 	void SetLight();
 	void CreateSphere(int LatLines, int LongLines);
 	void UpdateSky();
-	void InitializeWave(vector<Wave>& wave);
+	void InitializeWave(vector<Wave> &wave);
 	//void WaveMotion(ID3D11Buffer** buffer);
 };
 
@@ -516,20 +529,56 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 
 	vector<Wave> toCompute;
 	InitializeWave(toCompute);
+	dispatch = toCompute.size();
 	
+	// input
+
 	D3D11_BUFFER_DESC ComputeDesc;
 	ZeroMemory(&ComputeDesc, sizeof(ComputeDesc));
 	ComputeDesc.Usage = D3D11_USAGE_DEFAULT;
 	ComputeDesc.ByteWidth = sizeof(Wave) * toCompute.size();
-	ComputeDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+	ComputeDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
+	ComputeDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	ComputeDesc.StructureByteStride = sizeof(Wave);
 
 	D3D11_SUBRESOURCE_DATA ComputeData;
 	ZeroMemory(&ComputeData, sizeof(ComputeData));
 	ComputeData.pSysMem = &toCompute[0];
-
 	pDevice->CreateBuffer(&ComputeDesc, &ComputeData, &pWaveBuffer);
 
-	//pDevice->CreateUnorderedAccessView(&pWaveBuffer,)
+	D3D11_SHADER_RESOURCE_VIEW_DESC waveSRVDesc;
+	ZeroMemory(&waveSRVDesc, sizeof(waveSRVDesc));
+	waveSRVDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;
+	waveSRVDesc.BufferEx.FirstElement = 0;
+	waveSRVDesc.Format = DXGI_FORMAT_UNKNOWN;
+	waveSRVDesc.BufferEx.NumElements = toCompute.size();
+	pDevice->CreateShaderResourceView(pWaveBuffer, &waveSRVDesc, &pWaveSRV);
+
+	// output
+
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc;
+	ZeroMemory(&uavDesc, sizeof(uavDesc));
+	uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+	uavDesc.Buffer.FirstElement = 0;
+	uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+	uavDesc.Buffer.NumElements = toCompute.size();
+	
+	pDevice->CreateUnorderedAccessView(pWaveBuffer, &uavDesc, &pWaveView);
+
+	// CS Constant Buffer
+	toComputeAverage.average = Average;
+	toComputeAverage.time = (float)Time.Delta();
+	D3D11_BUFFER_DESC CSConstant;
+	ZeroMemory(&CSConstant, sizeof(CSConstant));
+	CSConstant.ByteWidth = sizeof(float) * 4;
+	CSConstant.Usage = D3D11_USAGE_DYNAMIC;
+	CSConstant.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	CSConstant.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	D3D11_SUBRESOURCE_DATA CSContantData;
+	ZeroMemory(&CSContantData, sizeof(CSContantData));
+	CSContantData.pSysMem = &toComputeAverage;
+	pDevice->CreateBuffer(&CSConstant, &CSContantData, &pWaveCB);
 
 #pragma endregion
 
@@ -556,6 +605,11 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 		sizeof(General_PS),
 		NULL,
 		&pNonTexturedPixelShader);
+	pDevice->CreateComputeShader(ComputeShader,
+		sizeof(ComputeShader),
+		NULL,
+		&pComputeShader);
+
 #pragma endregion
 
 #pragma region Layouts
@@ -677,8 +731,6 @@ bool DEMO_APP::Run()
 	pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	pDeviceContext->RSSetState(pDefaultRasterState);
 	pDeviceContext->IASetIndexBuffer(pIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
-	pDeviceContext->PSSetShaderResources(0, 1, &SRV);
-	pDeviceContext->PSSetSamplers(0, 1, &pTextureSamplerState);
 	pDeviceContext->VSSetConstantBuffers(0, 1, &pConstantBuffer);
 	pDeviceContext->PSSetConstantBuffers(0, 1, &pConstantLightBuffer);
 
@@ -708,9 +760,26 @@ bool DEMO_APP::Run()
 	memcpy(data.pData, &lightToShader, sizeof(lightToShader));
 	pDeviceContext->Unmap(pConstantLightBuffer, 0);
 #pragma endregion
+	pDeviceContext->Map(pWaveCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
+	toComputeAverage.average = Average;
+	toComputeAverage.time = (float)Time.Delta();
+	memcpy(data.pData, &toComputeAverage, sizeof(toComputeAverage));
+	pDeviceContext->Unmap(pWaveCB, 0);
 
+	pDeviceContext->CSSetShader(pComputeShader, NULL, 0);
+	pDeviceContext->CSSetUnorderedAccessViews(0, 1, &pWaveView, NULL);
+	pDeviceContext->CSSetConstantBuffers(0, 1, &pWaveCB);
+	pDeviceContext->Dispatch(384, 1, 1);
 
+	ID3D11UnorderedAccessView* tempView = nullptr;
+	pDeviceContext->CSSetUnorderedAccessViews(0, 1, &tempView, NULL);
+
+	pDeviceContext->PSSetShaderResources(0, 1, &SRV);
+	pDeviceContext->PSSetSamplers(0, 1, &pTextureSamplerState);
+	pDeviceContext->VSSetShaderResources(0, 1, &pWaveSRV);
 	pDeviceContext->DrawInstanced(verts.size(), OceanCount, 0, 0);
+	ID3D11ShaderResourceView* nullView = nullptr;
+	pDeviceContext->VSSetShaderResources(0, 1, &nullView);
 
 	pDeviceContext->Map(pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
 	//rotation += 1.0f *(float)Time.Delta();
@@ -798,6 +867,8 @@ bool DEMO_APP::ShutDown()
 	SkySRV->Release();
 	pNoCullRasterState->Release();
 	pDepthStateLessEqual->Release();
+	pWaveBuffer->Release();
+	pWaveView->Release();
 
 	UnregisterClass(L"DirectXApplication", application);
 	return true;
@@ -1073,7 +1144,7 @@ void DEMO_APP::UpdateSky()
 	SKYMATRIX = Scale * translation;
 }
 
-void DEMO_APP::InitializeWave(vector<Wave>& wave)
+void DEMO_APP::InitializeWave(vector<Wave> &wave)
 {
 	Average = 0.0f;
 	wave.resize(verts.size());
@@ -1081,6 +1152,7 @@ void DEMO_APP::InitializeWave(vector<Wave>& wave)
 	for (unsigned int i = 0; i < verts.size(); i++)
 	{
 		wave[i].Oscillation = verts[i].Position.y;
+		wave[i].CurrentY = verts[i].Position.y;
 	}
 
 	for (unsigned int i = 0; i < wave.size(); i++)

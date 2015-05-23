@@ -1,4 +1,5 @@
 #pragma pack_matrix(row_major)
+StructuredBuffer<float2> changeValues : register (t0);
 
 struct INPUT_VERTEX
 {
@@ -26,7 +27,7 @@ cbuffer THIS_IS_VRAM : register( b0 )
 	float4x4 PROJECTIONMATRIX;
 };
 
-OUTPUT_VERTEX main( INPUT_VERTEX fromVertexBuffer )
+OUTPUT_VERTEX main(INPUT_VERTEX fromVertexBuffer, uint id : SV_VertexID)
 {
 	OUTPUT_VERTEX sendToRasterizer = (OUTPUT_VERTEX)0;
 	sendToRasterizer.projectedCoordinate.w = 1;
@@ -34,6 +35,7 @@ OUTPUT_VERTEX main( INPUT_VERTEX fromVertexBuffer )
 	float4 vertex = float4(fromVertexBuffer.coordinate.xyz, 1);
 
 	vertex += float4(fromVertexBuffer.instancePos, 0.0f);
+	vertex.y += changeValues[id].x;
 	vertex = mul(vertex, WORLDMATRIX);
 	sendToRasterizer.position = vertex.xyz;
 	vertex = mul(vertex, VIEWMATRIX);

@@ -21,9 +21,6 @@
     <ClCompile Include="XTime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Cube.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="DDSTextureLoader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -33,6 +30,7 @@
     <ClCompile Include="TextureManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Cube.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="XTime.h">
@@ -60,11 +58,11 @@
   <ItemGroup>
     <FxCompile Include="Trivial_PS.hlsl" />
     <FxCompile Include="Trivial_VS.hlsl" />
-    <FxCompile Include="General_PS.hlsl" />
     <FxCompile Include="Sky_PS.hlsl" />
     <FxCompile Include="Sky_VS.hlsl" />
     <FxCompile Include="HullShader.hlsl" />
     <FxCompile Include="DomainShader.hlsl" />
     <FxCompile Include="ComputeShader.hlsl" />
+    <FxCompile Include="General_PS.hlsl" />
   </ItemGroup>
 </Project>
