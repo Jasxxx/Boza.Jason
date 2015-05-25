@@ -1166,11 +1166,11 @@ void DEMO_APP::InitializeWave(vector<Wave> &wave)
 	{
 		if (wave[i].Oscillation >= Average)
 		{
-			wave[i].Oscillation = 0.00005f;
+			wave[i].Oscillation = 0.0005f;
 		}
 		else
 		{
-			wave[i].Oscillation = -0.00005f;
+			wave[i].Oscillation = -0.0005f;
 		}
 	}
 }

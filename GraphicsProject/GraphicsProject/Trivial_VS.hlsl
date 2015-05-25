@@ -35,7 +35,7 @@ OUTPUT_VERTEX main(INPUT_VERTEX fromVertexBuffer, uint id : SV_VertexID)
 	float4 vertex = float4(fromVertexBuffer.coordinate.xyz, 1);
 
 	vertex += float4(fromVertexBuffer.instancePos, 0.0f);
-	vertex.y += changeValues[id].x;
+	vertex.y = changeValues[id].y;
 	vertex = mul(vertex, WORLDMATRIX);
 	sendToRasterizer.position = vertex.xyz;
 	vertex = mul(vertex, VIEWMATRIX);
