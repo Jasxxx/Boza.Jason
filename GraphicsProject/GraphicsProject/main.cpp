@@ -96,6 +96,8 @@ class DEMO_APP
 	// Buffers
 	ID3D11Buffer* pConstantBuffer;
 	ID3D11Buffer* pConstantLightBuffer;
+	ID3D11Buffer* pPointLightCB;
+	ID3D11Buffer* pSpotLightCb;
 	ID3D11Buffer* pIndexBuffer;
 	map<string, ID3D11Buffer*> VertexBufferMap;
 	ID3D11Buffer* pSphereIndexBuffer;
@@ -151,6 +153,20 @@ class DEMO_APP
 		float pad2;
 	};
 
+	struct PointLight
+	{
+		XMFLOAT3 postion;
+		float pad;
+	};
+
+	struct SpotLight
+	{
+		XMFLOAT3 position;
+		float cone;
+		XMFLOAT3 direction;
+		float pad;
+	};
+
 	struct  Wave
 	{
 		float Oscillation;
@@ -165,6 +181,8 @@ class DEMO_APP
 
 	SEND_TO_VRAM toShader;
 	Light lightToShader;
+	PointLight pointLightToShader;
+	SpotLight spotLightToShader;
 	WaveAverage toComputeAverage;
 
 	int dispatch;
@@ -423,6 +441,32 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 	ZeroMemory(&cLightData, sizeof(cLightData));
 	cLightData.pSysMem = &lightToShader;
 	pDevice->CreateBuffer(&cLightBuffer, &cLightData, &pConstantLightBuffer);
+
+	// Point Light
+	D3D11_BUFFER_DESC cPointLightBuffer;
+	ZeroMemory(&cPointLightBuffer, sizeof(cPointLightBuffer));
+	cPointLightBuffer.ByteWidth = sizeof(PointLight);
+	cPointLightBuffer.Usage = D3D11_USAGE_DYNAMIC;
+	cPointLightBuffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cPointLightBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	D3D11_SUBRESOURCE_DATA cPointLightData;
+	ZeroMemory(&cPointLightData, sizeof(cPointLightData));
+	cPointLightData.pSysMem = &pointLightToShader;
+	pDevice->CreateBuffer(&cPointLightBuffer, &cPointLightData, &pPointLightCB);
+
+	// Spot Light
+	D3D11_BUFFER_DESC cSpotLightBuffer;
+	ZeroMemory(&cSpotLightBuffer, sizeof(cSpotLightBuffer));
+	cSpotLightBuffer.ByteWidth = sizeof(SpotLight);
+	cSpotLightBuffer.Usage = D3D11_USAGE_DYNAMIC;
+	cSpotLightBuffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cSpotLightBuffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	D3D11_SUBRESOURCE_DATA cSpotLightData;
+	ZeroMemory(&cSpotLightData, sizeof(cSpotLightData));
+	cSpotLightData.pSysMem = &spotLightToShader;
+	pDevice->CreateBuffer(&cSpotLightBuffer, &cSpotLightData, &pSpotLightCb);
 
 	// instance buffer
 	//OceanCount = (OceanCount - 1);

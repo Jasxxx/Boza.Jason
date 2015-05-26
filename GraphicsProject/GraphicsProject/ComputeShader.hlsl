@@ -26,7 +26,7 @@ void main(uint3 index : SV_DispatchThreadID, uint gIndex : SV_GroupIndex)
 
 	float temptimer = time * data[gIndex].changeValue;
 	float PI = 3.14159265f;
-	float peak = 0.01f;
+	float peak = 0.02f;
 	
 	//data[gIndex].changeValue = time;
 	//data[gIndex].yValue = (peak * sin(/*(2 * PI / 0.001f) **/ data[gIndex].changeValue));
