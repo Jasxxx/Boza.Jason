@@ -4,17 +4,15 @@ struct VS_CONTROL_POINT_OUTPUT
 	float4 colorOut : COLOR;
 	float2 textureCoords : TEXTURE;
 	float3 normalOut : NORMAL;
-	float4 projectedCoordinate : SV_POSITION;
+	float4 projectedCoordinate : POSITION2;
 	float3 position : POSITION;
 };
 
 // Output control point
 struct HS_CONTROL_POINT_OUTPUT
 {
-	float4 colorOut : COLOR;
 	float2 textureCoords : TEXTURE;
 	float3 normalOut : NORMAL;
-	float4 projectedCoordinate : SV_POSITION;
 	float3 position : POSITION;
 };
 
@@ -26,6 +24,12 @@ struct HS_CONSTANT_DATA_OUTPUT
 	// TODO: change/add other stuff
 };
 
+cbuffer Constant : register (b0)
+{
+	float3 camPos;
+	float pad;
+};
+
 #define NUM_CONTROL_POINTS 3
 
 // Patch Constant Function
@@ -35,11 +39,19 @@ HS_CONSTANT_DATA_OUTPUT CalcHSPatchConstants(
 {
 	HS_CONSTANT_DATA_OUTPUT Output;
 
+	float max = 3.0f;
+	float min = 0.0f;
+	float dis = length(ip[PatchID].position - camPos);
+
+	dis /= max;
+	int tessFactor = 15;
+	tessFactor = (int)clamp(tessFactor - (dis * (float)tessFactor), 1, 15);
+
 	// Insert code to compute Output here
 	Output.EdgeTessFactor[0] = 
 	Output.EdgeTessFactor[1] = 
 	Output.EdgeTessFactor[2] = 
-	Output.InsideTessFactor = 15; // e.g. could calculate dynamic tessellation factors instead
+	Output.InsideTessFactor = tessFactor; // e.g. could calculate dynamic tessellation factors instead
 
 	return Output;
 }
@@ -57,7 +69,8 @@ HS_CONTROL_POINT_OUTPUT main(
 	HS_CONTROL_POINT_OUTPUT Output;
 
 	// Insert code to compute Output here
-	Output.position = ip[i].position;
-
+	Output.position = ip[i].projectedCoordinate;
+	Output.textureCoords = ip[i].textureCoords;
+	Output.normalOut = ip[i].normalOut;
 	return Output;
 }

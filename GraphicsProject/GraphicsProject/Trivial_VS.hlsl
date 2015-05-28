@@ -15,7 +15,7 @@ struct OUTPUT_VERTEX
 	float4 colorOut : COLOR;
 	float2 textureCoords : TEXTURE;
 	float3 normalOut : NORMAL;
-	float4 projectedCoordinate : SV_POSITION;
+	float4 projectedCoordinate : POSITION2;
 	float3 position : POSITION;
 };
 
@@ -36,12 +36,12 @@ OUTPUT_VERTEX main(INPUT_VERTEX fromVertexBuffer, uint id : SV_VertexID)
 
 	vertex += float4(fromVertexBuffer.instancePos, 0.0f);
 	vertex.y = changeValues[id].y;
+	sendToRasterizer.projectedCoordinate = float4(vertex);
 	vertex = mul(vertex, WORLDMATRIX);
 	sendToRasterizer.position = vertex.xyz;
 	vertex = mul(vertex, VIEWMATRIX);
 	vertex = mul(vertex, PROJECTIONMATRIX);
 	
-	sendToRasterizer.projectedCoordinate = vertex;
 	sendToRasterizer.colorOut = fromVertexBuffer.color;
 	sendToRasterizer.textureCoords = fromVertexBuffer.uv;
 

@@ -25,6 +25,8 @@
 #include "Sky_PS.csh"
 #include "ComputeShader.csh"
 #include "DDSTextureLoader.h"
+#include "HullShader.csh"
+#include "DomainShader.csh"
 
 #pragma comment(lib, "d3d11.lib")
 
@@ -78,7 +80,9 @@ class DEMO_APP
 
 	// Raster States
 	ID3D11RasterizerState* pDefaultRasterState;
+	ID3D11RasterizerState* pWireFrameRasterState;
 	ID3D11RasterizerState* pNoCullRasterState;
+	ID3D11RasterizerState* currRS;
 
 	// Sampler States
 	ID3D11SamplerState* pTextureSamplerState;
@@ -90,6 +94,8 @@ class DEMO_APP
 	ID3D11VertexShader* pSkyVertexShader;
 	ID3D11PixelShader* pSkyPixelShader;
 	ID3D11ComputeShader* pComputeShader;
+	ID3D11DomainShader* pDomainShader;
+	ID3D11HullShader* pHullShader;
 
 	D3D11_VIEWPORT MAIN_VIEWPORT;
 
@@ -104,7 +110,7 @@ class DEMO_APP
 	ID3D11Buffer* pSphereVertBuffer;
 	ID3D11Buffer* pConstantInstanceBuffer;
 	int NumSphereFaces;
-	ID3D11Buffer* pTesselationBuffer;
+	ID3D11Buffer* pTessCB;
 	ID3D11Buffer* pWaveBuffer;
 	ID3D11Buffer* pWaveCB;
 
@@ -153,10 +159,19 @@ class DEMO_APP
 		float pad2;
 	};
 
+	struct Tess
+	{
+		XMFLOAT3 camPos;
+		float pad;
+	};
+
 	struct PointLight
 	{
 		XMFLOAT3 postion;
 		float pad;
+		XMFLOAT4 color;
+		XMFLOAT3 att;
+		float pad2;
 	};
 
 	struct SpotLight
@@ -165,6 +180,7 @@ class DEMO_APP
 		float cone;
 		XMFLOAT3 direction;
 		float pad;
+		XMFLOAT4 color;
 	};
 
 	struct  Wave
@@ -184,6 +200,7 @@ class DEMO_APP
 	PointLight pointLightToShader;
 	SpotLight spotLightToShader;
 	WaveAverage toComputeAverage;
+	Tess toHullShader;
 
 	int dispatch;
 public:
@@ -196,6 +213,8 @@ public:
 	void Input();
 	void UpdateCamera();
 	void SetLight();
+	void SetPointLight();
+	void SetSpotLight();
 	void CreateSphere(int LatLines, int LongLines);
 	void UpdateSky();
 	void InitializeWave(vector<Wave> &wave);
@@ -555,17 +574,17 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 
 #pragma region Tesselation Buffer
 
-	//D3D11_BUFFER_DESC TessBufferData;
-	//ZeroMemory(&TessBufferData, sizeof(TessBufferData));
-	//TessBufferData.ByteWidth = sizeof(SEND_TO_VRAM);
-	//TessBufferData.Usage = D3D11_USAGE_DYNAMIC;
-	//TessBufferData.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	//TessBufferData.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	D3D11_BUFFER_DESC TessCBDesc;
+	ZeroMemory(&TessCBDesc, sizeof(TessCBDesc));
+	TessCBDesc.ByteWidth = sizeof(Tess);
+	TessCBDesc.Usage = D3D11_USAGE_DYNAMIC;
+	TessCBDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	TessCBDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-	//D3D11_SUBRESOURCE_DATA TessData;
-	//ZeroMemory(&TessData, sizeof(TessData));
-	//TessData.pSysMem = &toShader;
-	//pDevice->CreateBuffer(&TessBufferData, &TessData, &pTesselationBuffer);
+	D3D11_SUBRESOURCE_DATA TessCBData;
+	ZeroMemory(&TessCBData, sizeof(TessCBData));
+	TessCBData.pSysMem = &toHullShader;
+	pDevice->CreateBuffer(&TessCBDesc, &TessCBData, &pTessCB);
 
 #pragma endregion
 
@@ -653,6 +672,14 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 		sizeof(ComputeShader),
 		NULL,
 		&pComputeShader);
+	pDevice->CreateDomainShader(DomainShader,
+		sizeof(DomainShader),
+		NULL,
+		&pDomainShader);
+	pDevice->CreateHullShader(HullShader,
+		sizeof(HullShader),
+		NULL,
+		&pHullShader);
 
 #pragma endregion
 
@@ -703,14 +730,21 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 
 	D3D11_RASTERIZER_DESC DefaultRasterDesc;
 	ZeroMemory(&DefaultRasterDesc, sizeof(DefaultRasterDesc));
-	DefaultRasterDesc.AntialiasedLineEnable = FALSE;
+	DefaultRasterDesc.AntialiasedLineEnable = TRUE;
 	DefaultRasterDesc.CullMode = D3D11_CULL_BACK;
 	DefaultRasterDesc.FillMode = D3D11_FILL_SOLID;
 	pDevice->CreateRasterizerState(&DefaultRasterDesc, &pDefaultRasterState);
 
+	D3D11_RASTERIZER_DESC WireFrameRasterDesc;
+	ZeroMemory(&WireFrameRasterDesc, sizeof(WireFrameRasterDesc));
+	WireFrameRasterDesc.AntialiasedLineEnable = TRUE;
+	WireFrameRasterDesc.CullMode = D3D11_CULL_BACK;
+	WireFrameRasterDesc.FillMode = D3D11_FILL_WIREFRAME;
+	pDevice->CreateRasterizerState(&WireFrameRasterDesc, &pWireFrameRasterState);
+
 	D3D11_RASTERIZER_DESC NoCullRasterDesc;
 	ZeroMemory(&NoCullRasterDesc, sizeof(NoCullRasterDesc));
-	NoCullRasterDesc.AntialiasedLineEnable = FALSE;
+	NoCullRasterDesc.AntialiasedLineEnable = TRUE;
 	NoCullRasterDesc.CullMode = D3D11_CULL_NONE;
 	NoCullRasterDesc.FillMode = D3D11_FILL_SOLID;
 	pDevice->CreateRasterizerState(&NoCullRasterDesc, &pNoCullRasterState);
@@ -737,7 +771,7 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 #pragma endregion
 
 #pragma endregion
-
+	currRS = pDefaultRasterState;
 	Time.Restart();
 	//InitializeWave();
 }
@@ -749,7 +783,6 @@ DEMO_APP::DEMO_APP(HINSTANCE hinst, WNDPROC proc)
 bool DEMO_APP::Run()
 {
 	Time.Signal();
-	SetLight();
 	Input();
 	UpdateSky();
 
@@ -772,11 +805,23 @@ bool DEMO_APP::Run()
 	pDeviceContext->IASetInputLayout(pInputLayout);
 	pDeviceContext->VSSetShader(pVertexShader, NULL, 0);
 	pDeviceContext->PSSetShader(pPixelShader, NULL, 0);
-	pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	pDeviceContext->RSSetState(pDefaultRasterState);
+	pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST);
+
+	pDeviceContext->RSSetState(currRS);
+	
+
+
+
+
 	pDeviceContext->IASetIndexBuffer(pIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 	pDeviceContext->VSSetConstantBuffers(0, 1, &pConstantBuffer);
 	pDeviceContext->PSSetConstantBuffers(0, 1, &pConstantLightBuffer);
+	pDeviceContext->PSSetConstantBuffers(1, 1, &pPointLightCB);
+	pDeviceContext->PSSetConstantBuffers(2, 1, &pSpotLightCb);
+	pDeviceContext->HSSetShader(pHullShader, NULL, 0);
+	pDeviceContext->DSSetShader(pDomainShader, NULL, 0);
+	pDeviceContext->HSSetConstantBuffers(0, 1, &pTessCB);
+	pDeviceContext->DSSetConstantBuffers(0, 1, &pConstantBuffer);
 
 	D3D11_MAPPED_SUBRESOURCE data;
 	ZeroMemory(&data, sizeof(data));
@@ -800,9 +845,20 @@ bool DEMO_APP::Run()
 	pDeviceContext->Unmap(pConstantBuffer, 0);
 
 #pragma region map light
+	SetLight();
 	pDeviceContext->Map(pConstantLightBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
 	memcpy(data.pData, &lightToShader, sizeof(lightToShader));
 	pDeviceContext->Unmap(pConstantLightBuffer, 0);
+
+	SetPointLight();
+	pDeviceContext->Map(pPointLightCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
+	memcpy(data.pData, &pointLightToShader, sizeof(pointLightToShader));
+	pDeviceContext->Unmap(pPointLightCB, 0);
+
+	SetSpotLight();
+	pDeviceContext->Map(pSpotLightCb, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
+	memcpy(data.pData, &spotLightToShader, sizeof(spotLightToShader));
+	pDeviceContext->Unmap(pSpotLightCb, 0);
 #pragma endregion
 	pDeviceContext->Map(pWaveCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
 	toComputeAverage.average = Average;
@@ -818,12 +874,23 @@ bool DEMO_APP::Run()
 	ID3D11UnorderedAccessView* tempView = nullptr;
 	pDeviceContext->CSSetUnorderedAccessViews(0, 1, &tempView, NULL);
 
+	// Draw ocean
 	pDeviceContext->PSSetShaderResources(0, 1, &SRV);
 	pDeviceContext->PSSetSamplers(0, 1, &pTextureSamplerState);
 	pDeviceContext->VSSetShaderResources(0, 1, &pWaveSRV);
+
+	pDeviceContext->Map(pTessCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
+	memcpy(data.pData, &toHullShader, sizeof(toHullShader));
+	pDeviceContext->Unmap(pTessCB, 0);
+	
 	pDeviceContext->DrawInstanced(verts.size(), OceanCount, 0, 0);
 	ID3D11ShaderResourceView* nullView = nullptr;
 	pDeviceContext->VSSetShaderResources(0, 1, &nullView);
+	pDeviceContext->HSSetShader(nullptr, NULL, 0);
+	pDeviceContext->DSSetShader(nullptr, NULL, 0);
+
+	pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
 
 	pDeviceContext->Map(pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
 	//rotation += 1.0f *(float)Time.Delta();
@@ -844,7 +911,7 @@ bool DEMO_APP::Run()
 
 	pDeviceContext->PSSetShader(pNonTexturedPixelShader, NULL, 0);
 	pDeviceContext->IASetVertexBuffers(0, 1, &VertexBufferMap["star"], &stride, &offset);
-	pDeviceContext->DrawIndexed(60, 0, 0);
+	//pDeviceContext->DrawIndexed(60, 0, 0);
 
 	pDeviceContext->Map(pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &data);
 	//rotation += 1.0f *(float)Time.Delta();
@@ -892,6 +959,7 @@ bool DEMO_APP::ShutDown()
 	pBackBuffer->Release();
 	pVertexShader->Release();
 	pPixelShader->Release();
+	pComputeShader->Release();
 	pNonTexturedPixelShader->Release();
 	pInputLayout->Release();
 	pDepthStencil->Release();
@@ -901,6 +969,8 @@ bool DEMO_APP::ShutDown()
 	//pBlendState->Release();
 	pConstantBuffer->Release();
 	pConstantLightBuffer->Release();
+	pSpotLightCb->Release();
+	pPointLightCB->Release();
 	VertexBufferMap["ocean"]->Release();
 	VertexBufferMap["star"]->Release();
 	pSphereIndexBuffer->Release();
@@ -912,7 +982,13 @@ bool DEMO_APP::ShutDown()
 	pNoCullRasterState->Release();
 	pDepthStateLessEqual->Release();
 	pWaveBuffer->Release();
+	pWaveSRV->Release();
 	pWaveView->Release();
+	pWaveCB->Release();
+	pTessCB->Release();
+	pDomainShader->Release();
+	pHullShader->Release();
+	pWireFrameRasterState->Release();
 
 	UnregisterClass(L"DirectXApplication", application);
 	return true;
@@ -994,6 +1070,12 @@ void DEMO_APP::Input()
 	if (GetAsyncKeyState(VK_DOWN))
 		RotateX -= (float)Time.Delta();
 
+	if (GetAsyncKeyState('1'))
+		currRS = pDefaultRasterState;
+
+	if (GetAsyncKeyState('2'))
+		currRS = pWireFrameRasterState;
+
 	/*Transform = XMLoadFloat4x4(&temp);*/
 	UpdateCamera();
 }
@@ -1020,22 +1102,22 @@ void DEMO_APP::UpdateCamera()
 void DEMO_APP::SetLight()
 {
 
-	if (lightChange >= 1.0f)
+	if (lightChange >= 2.0f)
 	{
-		lightChange = 1.0f;
-		change = -0.001f;
+		lightChange = 2.0f;
+		change = -1.0f;
 	}
 	if (lightChange <= 0.0f)
 	{
 		lightChange = 0.0f;
-		change = 0.001f;
+		change = 1.0f;
 	}
 
-	lightChange += change;
+	lightChange += change * (float)Time.Delta();
 
-	lightToShader.dir = XMFLOAT3(0.5f, -1.0f, -0.5f);
-	lightToShader.ambient = XMFLOAT4(0.05f, 0.05f, 0.05f, 1.0f);
-	lightToShader.diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	lightToShader.dir = XMFLOAT3(lightChange, -1.0f, -0.5f);
+	lightToShader.ambient = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+	lightToShader.diffuse = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
 	lightToShader.specular = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	lightToShader.specularPower = 64.0f;
 
@@ -1043,12 +1125,34 @@ void DEMO_APP::SetLight()
 	XMMATRIX tempMatrix2 = XMLoadFloat4x4(&PROJECTIONMATRIX);
 	tempMatrix = XMMatrixInverse(NULL, tempMatrix);
 	lightToShader.CameraPosition = XMFLOAT3(tempMatrix.r[3].m128_f32[0], tempMatrix.r[3].m128_f32[1], tempMatrix.r[3].m128_f32[2]);
+	toHullShader.camPos = XMFLOAT3(tempMatrix.r[3].m128_f32[0], tempMatrix.r[3].m128_f32[1], tempMatrix.r[3].m128_f32[2]);
+	toHullShader.pad = 0.0f;
 	tempMatrix = XMMatrixMultiply(tempMatrix, tempMatrix2);
 
 	XMFLOAT4X4 newView;
 	XMStoreFloat4x4(&newView, tempMatrix);
 
 	lightToShader.padding = 0.0f;
+}
+
+void DEMO_APP::SetPointLight()
+{
+	pointLightToShader.postion = XMFLOAT3(0.5f, 0.5f, lightChange);
+	pointLightToShader.pad = 0.0f;
+	pointLightToShader.color = XMFLOAT4(2.0f, 5.0f, 0.0f, 1.0f);
+	pointLightToShader.att = XMFLOAT3(0.0f, 0.2f, 0.0f);
+	pointLightToShader.pad2 = 0.0f;
+}
+
+void DEMO_APP::SetSpotLight()
+{
+	XMMATRIX tempMatrix = XMLoadFloat4x4(&VIEWMATRIX);
+	tempMatrix = XMMatrixInverse(NULL, tempMatrix);
+	spotLightToShader.position = XMFLOAT3(tempMatrix.r[3].m128_f32[0], tempMatrix.r[3].m128_f32[1], tempMatrix.r[3].m128_f32[2]);
+	spotLightToShader.direction = XMFLOAT3(tempMatrix.r[2].m128_f32[0], tempMatrix.r[2].m128_f32[1], tempMatrix.r[2].m128_f32[2]);
+	spotLightToShader.cone = 0.95f;
+	spotLightToShader.pad = 0.0f;
+	spotLightToShader.color = XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f);
 }
 
 void DEMO_APP::CreateSphere(int LatLines, int LongLines)

@@ -27,6 +27,25 @@ cbuffer Light : register (b0)
 	float pad2;
 }
 
+cbuffer PointLight : register (b1)
+{
+	float3 positionPL;
+	float padPL;
+	float4 colorPL;
+	float3 attPL;
+	float pad2PL;
+}
+
+cbuffer SpotLight : register (b2)
+{
+	float3 positionSL;
+	float coneSL;
+	float3 dirSL;
+	float padSL;
+	float4 colorSL;
+}
+
+
 float4 main(OUTPUT_VERTEX input) : SV_TARGET
 {
 	float3 ViewDir = normalize(CamPos - input.position);
@@ -48,6 +67,21 @@ float4 main(OUTPUT_VERTEX input) : SV_TARGET
 	float lightRatio = saturate(dot(lightDir, normalizednrm));
 	float4 newDiffuse = saturate(diffuse * lightRatio * TextureColor);
 
+		// point light
+	float3 PLDir = positionPL - input.position;
+	float PLDis = length(PLDir);
+	PLDir = normalize(PLDir);
+	float PLRatio = saturate(dot(PLDir, normalizednrm));
+	float4 PLColor = PLRatio * colorPL * TextureColor;
+	float att = (1.0f - saturate(PLDis / 1.0f));
+	att *= att;
+	PLColor *= att;
+		//SpotLight
+	float3 SLDir = normalize(positionSL - input.position);
+	float SLRatio = saturate(dot(-SLDir, dirSL));
+	float SLFactor = SLRatio > coneSL ? 1 : 0;
+	float SLLightRatio = saturate(dot(SLDir, normalizednrm));
+	float4 SLColor = SLFactor * SLLightRatio * colorSL * TextureColor;
 	//if (lightIntensity > 0.0f)
 	// Calculate final diffuse color by applying the light intensity to it
 	//color += (diffuse * lightIntensity);
@@ -60,7 +94,7 @@ float4 main(OUTPUT_VERTEX input) : SV_TARGET
 	newSpecular.xyz = saturate(specular.xyz * pow(lightIntensity, specularPower) * 1);
 
 
-	color += saturate(newSpecular + newDiffuse);
+	color += saturate(newSpecular + newDiffuse + PLColor + SLColor);
 
 	// determine textured color
 	color = color * TextureColor;
